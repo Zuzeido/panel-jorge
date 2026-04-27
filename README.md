@@ -16,17 +16,7 @@ Panel tipo CRM para visualizar productos, categorias, stock y pedidos de una tie
 
 Edita `config/users.json`:
 
-```json
-{
-  "users": [
-    {
-      "username": "admin",
-      "password": "admin123",
-      "name": "Administrador",
-      "role": "Owner"
-    }
-  ]
-}
+
 ```
 
 ### 2. Shopify
