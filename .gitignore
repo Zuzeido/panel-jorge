@@ -1,0 +1,7 @@
+node_modules
+dist
+.DS_Store
+
+# Configuracion local sensible
+config/shopify.json
+config/users.json
