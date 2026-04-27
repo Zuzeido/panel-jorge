@@ -322,6 +322,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [activeView, setActiveView] = useState('inicio');
   const [dashboard, setDashboard] = useState(null);
+  const [dashboardError, setDashboardError] = useState('');
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
   const [error, setError] = useState('');
@@ -332,11 +333,18 @@ export default function App() {
       setUser(session.user);
       const data = await fetchDashboard();
       setDashboard(data);
+      setDashboardError('');
       setError('');
-    } catch (_requestError) {
-      clearToken();
-      setUser(null);
-      setDashboard(null);
+    } catch (requestError) {
+      if (requestError.message === 'Sesion no valida.') {
+        clearToken();
+        setUser(null);
+        setDashboard(null);
+        setDashboardError('');
+      } else {
+        setDashboard(null);
+        setDashboardError(requestError.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -345,6 +353,7 @@ export default function App() {
   async function refreshDashboard() {
     const data = await fetchDashboard();
     setDashboard(data);
+    setDashboardError('');
   }
 
   useEffect(() => {
@@ -365,8 +374,16 @@ export default function App() {
       setUser(loggedUser);
       const data = await fetchDashboard();
       setDashboard(data);
+      setDashboardError('');
     } catch (requestError) {
-      setError(requestError.message);
+      if (requestError.message === 'Sesion no valida.') {
+        setError(requestError.message);
+        setUser(null);
+      } else {
+        setDashboard(null);
+        setDashboardError(requestError.message);
+        setError('');
+      }
     } finally {
       setAuthLoading(false);
       setLoading(false);
@@ -382,6 +399,7 @@ export default function App() {
 
     setUser(null);
     setDashboard(null);
+    setDashboardError('');
     setActiveView('inicio');
   }
 
@@ -424,7 +442,9 @@ export default function App() {
             {activeView === 'pedidos' ? <OrdersView orders={dashboard.orders} /> : null}
           </>
         ) : (
-          <div className="loading-screen">No se pudo cargar el dashboard.</div>
+          <div className="loading-screen">
+            {dashboardError || 'No se pudo cargar el dashboard.'}
+          </div>
         )}
       </main>
     </div>
