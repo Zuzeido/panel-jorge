@@ -38,6 +38,16 @@ function parseBoolean(value, fallback) {
   return String(value).toLowerCase() === 'true';
 }
 
+function readEnvValue(name) {
+  const value = process.env[name];
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const trimmed = String(value).trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
 export async function readUsersConfig() {
   const envConfig = parseJsonEnv('APP_USERS_JSON');
   if (envConfig?.users) {
@@ -56,19 +66,19 @@ export async function readShopifyConfig() {
     ...fileConfig,
     ...envConfig,
     storeDomain:
-      process.env.SHOPIFY_STORE_DOMAIN ?? envConfig.storeDomain ?? fileConfig.storeDomain ?? '',
-    apiKey: process.env.SHOPIFY_API_KEY ?? envConfig.apiKey ?? fileConfig.apiKey ?? '',
+      readEnvValue('SHOPIFY_STORE_DOMAIN') ?? envConfig.storeDomain ?? fileConfig.storeDomain ?? '',
+    apiKey: readEnvValue('SHOPIFY_API_KEY') ?? envConfig.apiKey ?? fileConfig.apiKey ?? '',
     apiSecret:
-      process.env.SHOPIFY_API_SECRET ?? envConfig.apiSecret ?? fileConfig.apiSecret ?? '',
+      readEnvValue('SHOPIFY_API_SECRET') ?? envConfig.apiSecret ?? fileConfig.apiSecret ?? '',
     accessToken:
-      process.env.SHOPIFY_ACCESS_TOKEN ?? envConfig.accessToken ?? fileConfig.accessToken ?? '',
+      readEnvValue('SHOPIFY_ACCESS_TOKEN') ?? envConfig.accessToken ?? fileConfig.accessToken ?? '',
     apiVersion:
-      process.env.SHOPIFY_API_VERSION ??
+      readEnvValue('SHOPIFY_API_VERSION') ??
       envConfig.apiVersion ??
       fileConfig.apiVersion ??
       '2025-10',
     locationId:
-      process.env.SHOPIFY_LOCATION_ID ?? envConfig.locationId ?? fileConfig.locationId ?? '',
+      readEnvValue('SHOPIFY_LOCATION_ID') ?? envConfig.locationId ?? fileConfig.locationId ?? '',
     useDemoDataWhenMissingCredentials: parseBoolean(
       process.env.SHOPIFY_USE_DEMO_DATA_WHEN_MISSING_CREDENTIALS,
       envConfig.useDemoDataWhenMissingCredentials ??

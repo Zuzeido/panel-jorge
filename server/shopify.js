@@ -41,6 +41,12 @@ async function getAccessToken(config) {
     throw new Error('Shopify no devolvio access_token.');
   }
 
+  if (!payload.scope) {
+    throw new Error(
+      'La app de Shopify no tiene scopes concedidos. Publica e instala permisos como read_products, read_orders y read_locations.'
+    );
+  }
+
   const expiresInSeconds = Number(payload.expires_in || 86399);
   tokenCache.set(cacheKey, {
     token: payload.access_token,
@@ -72,6 +78,16 @@ async function shopifyGraphQL(config, query, variables = {}) {
   const payload = await response.json();
 
   if (payload.errors?.length) {
+    const accessDenied = payload.errors.some(
+      (error) => error.extensions?.code === 'ACCESS_DENIED'
+    );
+
+    if (accessDenied) {
+      throw new Error(
+        'Shopify denego acceso por scopes insuficientes. Reinstala o publica la app con read_products, read_orders y read_locations.'
+      );
+    }
+
     throw new Error(payload.errors.map((error) => error.message).join(', '));
   }
 

@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite --host 0.0.0.0",
-    "dev:server": "HOST=0.0.0.0 PORT=8766 node --watch server/index.js",
+    "dev:server": "HOST=0.0.0.0 PORT=8766 node --env-file=.env --watch server/index.js",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server/index.js"
+    "start": "node --env-file=.env server/index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
