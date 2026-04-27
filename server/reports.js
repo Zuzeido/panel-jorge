@@ -192,8 +192,12 @@ export async function buildMonthlySalesReportPdf({ rows, summary, generatedAt })
   return createPdfBuffer((doc) => {
     drawHeader(
       doc,
-      'Recycled J - Informe de ventas del mes',
-      `Mes actual: ${monthLabel()} · generado el ${formatDate(generatedAt)}`
+      summary.excludeHdlr
+        ? 'Recycled J - Informe de ventas del mes sin HDLR'
+        : 'Recycled J - Informe de ventas del mes',
+      `${
+        summary.excludeHdlr ? 'Mes actual sin familia/coleccion HDLR' : `Mes actual: ${monthLabel()}`
+      } · generado el ${formatDate(generatedAt)}`
     );
 
     drawSectionTitle(doc, 'Resumen');

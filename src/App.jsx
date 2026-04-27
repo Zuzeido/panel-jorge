@@ -956,6 +956,33 @@ function ReportsView() {
               : 'Descargar informe de ventas'}
           </button>
         </article>
+
+        <article className="panel-card report-card">
+          <div className="panel-title">
+            <div>
+              <span className="eyebrow">PDF</span>
+              <h3>Informe de ventas del mes sin HDLR</h3>
+            </div>
+          </div>
+          <p className="report-copy">
+            Genera el mismo informe mensual, pero excluyendo toda venta asociada a la familia o
+            coleccion HDLR.
+          </p>
+          <button
+            onClick={() =>
+              handleDownload(
+                'monthly-sales-without-hdlr',
+                '/api/reports/monthly-sales-without-hdlr.pdf',
+                'recycled-j-ventas-mes-actual-sin-hdlr.pdf'
+              )
+            }
+            disabled={loadingKey === 'monthly-sales-without-hdlr'}
+          >
+            {loadingKey === 'monthly-sales-without-hdlr'
+              ? 'Generando PDF...'
+              : 'Descargar informe sin HDLR'}
+          </button>
+        </article>
       </section>
     </div>
   );

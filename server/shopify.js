@@ -554,6 +554,14 @@ export async function getStockReportData() {
 }
 
 export async function getMonthlySalesReportData() {
+  return getMonthlySalesReportDataBase({ excludeHdlr: false });
+}
+
+export async function getMonthlySalesReportWithoutHdlrData() {
+  return getMonthlySalesReportDataBase({ excludeHdlr: true });
+}
+
+async function getMonthlySalesReportDataBase({ excludeHdlr }) {
   const config = await readShopifyConfig();
   const generatedAt = new Date().toISOString();
 
@@ -629,6 +637,14 @@ export async function getMonthlySalesReportData() {
 
   for (const order of orders) {
     for (const item of order.lineItems || []) {
+      const isHdlr =
+        item.productType?.toLowerCase() === 'hdlr' ||
+        item.collections?.some((collection) => collection.toLowerCase() === 'hdlr');
+
+      if (excludeHdlr && isHdlr) {
+        continue;
+      }
+
       const key = item.productTitle || item.title;
       const current = map.get(key) || {
         name: key,
@@ -665,7 +681,8 @@ export async function getMonthlySalesReportData() {
       ordersCount: orders.length,
       units,
       revenue,
-      currencyCode
+      currencyCode,
+      excludeHdlr
     }
   };
 }

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildMonthlySalesReportPdf, buildStockReportPdf } from './reports.js';
 import {
+  getMonthlySalesReportWithoutHdlrData,
   getMonthlySalesReportData,
   getOrdersPage,
   getProductsPage,
@@ -140,6 +141,21 @@ app.get('/api/reports/monthly-sales.pdf', requireAuth, async (_req, res) => {
     res.setHeader(
       'Content-Disposition',
       'attachment; filename="recycled-j-ventas-mes-actual.pdf"'
+    );
+    return res.send(pdfBuffer);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reports/monthly-sales-without-hdlr.pdf', requireAuth, async (_req, res) => {
+  try {
+    const payload = await getMonthlySalesReportWithoutHdlrData();
+    const pdfBuffer = await buildMonthlySalesReportPdf(payload);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="recycled-j-ventas-mes-actual-sin-hdlr.pdf"'
     );
     return res.send(pdfBuffer);
   } catch (error) {
