@@ -681,8 +681,8 @@ function ProductsView() {
       <section className="table-card">
         <div className="table-head products-table">
           <span>Producto</span>
-          <span>Categoria</span>
-          <span>Proveedor</span>
+          <span>Colecciones</span>
+          <span>Precio</span>
           <span>Estado</span>
           <span>Stock</span>
           <span>Actualizado</span>
@@ -693,8 +693,8 @@ function ProductsView() {
               <strong>{product.title}</strong>
               <p>{product.variants.length} variantes</p>
             </div>
-            <span>{product.productType}</span>
-            <span>{product.vendor}</span>
+            <span>{product.collections?.join(', ') || 'Sin coleccion'}</span>
+            <span>{formatMoney(product.price)}</span>
             <span>
               <span className={`pill ${product.status.toLowerCase()}`}>{product.status}</span>
             </span>

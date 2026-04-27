@@ -9,6 +9,7 @@ export const demoProducts = [
     updatedAt: '2026-04-25T10:15:00Z',
     tags: ['destacado', 'invierno'],
     imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=80',
+    collections: ['Drop Primavera', 'Best Sellers'],
     variants: [
       {
         id: 'gid://shopify/ProductVariant/11',
@@ -38,6 +39,7 @@ export const demoProducts = [
     updatedAt: '2026-04-24T12:40:00Z',
     tags: ['rebajas', 'verano'],
     imageUrl: 'https://images.unsplash.com/photo-1527719327859-c6ce80353573?auto=format&fit=crop&w=800&q=80',
+    collections: ['HDLR'],
     variants: [
       {
         id: 'gid://shopify/ProductVariant/21',
@@ -67,6 +69,7 @@ export const demoProducts = [
     updatedAt: '2026-04-26T08:05:00Z',
     tags: ['nuevo'],
     imageUrl: 'https://images.unsplash.com/photo-1521369909029-2afed882baee?auto=format&fit=crop&w=800&q=80',
+    collections: ['Accesorios', 'Drop Primavera'],
     variants: [
       {
         id: 'gid://shopify/ProductVariant/31',

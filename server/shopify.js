@@ -193,6 +193,11 @@ const PRODUCT_PAGE_QUERY = `
         featuredImage {
           url
         }
+        collections(first: 10) {
+          nodes {
+            title
+          }
+        }
         variants(first: 20) {
           nodes {
             id
@@ -283,24 +288,27 @@ const ORDER_PAGE_QUERY = `
 `;
 
 function mapProduct(node) {
+  const variants = (node.variants?.nodes || []).map((variant) => ({
+    id: variant.id,
+    title: variant.title,
+    sku: variant.sku || 'Sin SKU',
+    price: variant.price,
+    inventoryQuantity: variant.inventoryQuantity ?? 0,
+    inventoryItemId: variant.inventoryItem?.id || ''
+  }));
+
   return {
     id: node.id,
     title: node.title,
     productType: node.productType || 'Sin categoria',
-    vendor: node.vendor || 'Sin proveedor',
     status: node.status,
     totalInventory: node.totalInventory ?? 0,
     updatedAt: node.updatedAt,
     tags: node.tags || [],
     imageUrl: node.featuredImage?.url || '',
-    variants: (node.variants?.nodes || []).map((variant) => ({
-      id: variant.id,
-      title: variant.title,
-      sku: variant.sku || 'Sin SKU',
-      price: variant.price,
-      inventoryQuantity: variant.inventoryQuantity ?? 0,
-      inventoryItemId: variant.inventoryItem?.id || ''
-    }))
+    collections: (node.collections?.nodes || []).map((collection) => collection.title).filter(Boolean),
+    price: variants[0]?.price || '0.00',
+    variants
   };
 }
 
@@ -462,8 +470,7 @@ export async function getProductsPage({ after = null, first = 50, search = '' } 
           const term = search.toLowerCase();
           return (
             product.title.toLowerCase().includes(term) ||
-            product.productType.toLowerCase().includes(term) ||
-            product.vendor.toLowerCase().includes(term)
+            product.collections.join(' ').toLowerCase().includes(term)
           );
         });
 
