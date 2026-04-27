@@ -151,6 +151,14 @@ code {
   border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.sidebar-topbar {
+  display: contents;
+}
+
+.sidebar-panel {
+  display: contents;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -201,6 +209,25 @@ code {
   background: rgba(255, 255, 255, 0.08);
   color: #fff8eb;
   border-color: rgba(239, 229, 200, 0.18);
+}
+
+.hamburger-button {
+  display: none;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.hamburger-button span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  margin: 3px auto;
+  border-radius: 999px;
+  background: #fff8eb;
 }
 
 .sidebar-footer {
@@ -460,6 +487,17 @@ code {
   background: linear-gradient(90deg, #1f3b30 0%, #d6b56b 100%);
 }
 
+.report-card {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.report-copy {
+  margin: 0;
+  color: #5f6f69;
+}
+
 .table-card {
   overflow: hidden;
 }
@@ -572,8 +610,42 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    gap: 0.9rem;
+    padding: 1rem;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .sidebar-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .sidebar-panel {
+    display: none;
+    gap: 0.9rem;
+  }
+
+  .sidebar.mobile-open .sidebar-panel {
+    display: grid;
+  }
+
+  .brand {
+    margin-bottom: 0;
+  }
+
+  .hamburger-button {
+    display: inline-block;
+  }
+
   .nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 }
 

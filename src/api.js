@@ -78,3 +78,25 @@ export async function fetchOrdersPage({ after = '', first = 50, search = '' } = 
 
   return request(`/api/orders?${params.toString()}`);
 }
+
+export async function downloadReport(path, filename) {
+  const token = getToken();
+  const response = await fetch(path, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || 'No se pudo generar el informe.');
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = window.document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  window.document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}

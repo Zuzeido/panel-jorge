@@ -3,7 +3,16 @@ import cors from 'cors';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getOrdersPage, getProductsPage, getStoreData, updateInventory, updateProduct } from './shopify.js';
+import { buildMonthlySalesReportPdf, buildStockReportPdf } from './reports.js';
+import {
+  getMonthlySalesReportData,
+  getOrdersPage,
+  getProductsPage,
+  getStockReportData,
+  getStoreData,
+  updateInventory,
+  updateProduct
+} from './shopify.js';
 import { createSessionToken, readSessionFromRequest } from './auth.js';
 import { readUsersConfig } from './config.js';
 
@@ -106,6 +115,33 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       search: String(req.query.search || '')
     });
     return res.json(data);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reports/stock.pdf', requireAuth, async (_req, res) => {
+  try {
+    const payload = await getStockReportData();
+    const pdfBuffer = await buildStockReportPdf(payload);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="recycled-j-stock.pdf"');
+    return res.send(pdfBuffer);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reports/monthly-sales.pdf', requireAuth, async (_req, res) => {
+  try {
+    const payload = await getMonthlySalesReportData();
+    const pdfBuffer = await buildMonthlySalesReportPdf(payload);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="recycled-j-ventas-mes-actual.pdf"'
+    );
+    return res.send(pdfBuffer);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }

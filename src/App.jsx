@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   clearToken,
+  downloadReport,
   fetchDashboard,
   fetchOrdersPage,
   fetchProductsPage,
@@ -18,7 +19,8 @@ const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio' },
   { id: 'colecciones', label: 'Colecciones' },
   { id: 'productos', label: 'Productos' },
-  { id: 'pedidos', label: 'Pedidos' }
+  { id: 'pedidos', label: 'Pedidos' },
+  { id: 'informes', label: 'Informes' }
 ];
 
 function formatDate(value) {
@@ -258,9 +260,16 @@ function LoginScreen({ onLogin, loading, error }) {
 }
 
 function Sidebar({ activeView, onChange, user, source, onLogout }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  function handleChange(view) {
+    onChange(view);
+    setMobileMenuOpen(false);
+  }
+
   return (
-    <aside className="sidebar">
-      <div>
+    <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+      <div className="sidebar-topbar">
         <div className="brand">
           <span className="brand-mark">RJ</span>
           <div>
@@ -268,28 +277,41 @@ function Sidebar({ activeView, onChange, user, source, onLogout }) {
             <p>{source === 'shopify' ? 'CRM conectado a Shopify' : 'CRM en modo demo'}</p>
           </div>
         </div>
+        <button
+          className="hamburger-button"
+          type="button"
+          aria-label="Abrir menu"
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen((current) => !current)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+      </div>
 
+      <div className="sidebar-panel">
         <nav className="nav">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
               className={item.id === activeView ? 'nav-item active' : 'nav-item'}
-              onClick={() => onChange(item.id)}
+              onClick={() => handleChange(item.id)}
             >
               {item.label}
             </button>
           ))}
         </nav>
-      </div>
 
-      <div className="sidebar-footer">
-        <div>
-          <strong>{user.name}</strong>
-          <p>@{user.username}</p>
+        <div className="sidebar-footer">
+          <div>
+            <strong>{user.name}</strong>
+            <p>@{user.username}</p>
+          </div>
+          <button className="secondary-button" onClick={onLogout}>
+            Salir
+          </button>
         </div>
-        <button className="secondary-button" onClick={onLogout}>
-          Salir
-        </button>
       </div>
     </aside>
   );
@@ -848,6 +870,89 @@ function OrdersView() {
   );
 }
 
+function ReportsView() {
+  const [loadingKey, setLoadingKey] = useState('');
+  const [error, setError] = useState('');
+
+  async function handleDownload(key, path, filename) {
+    try {
+      setLoadingKey(key);
+      setError('');
+      await downloadReport(path, filename);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoadingKey('');
+    }
+  }
+
+  return (
+    <div className="page-content">
+      <header className="page-header">
+        <div>
+          <span className="eyebrow">CRM Recycled J</span>
+          <h2>Informes</h2>
+          <p className="page-header-copy">
+            Genera documentos PDF listos para compartir con operaciones y administracion.
+          </p>
+        </div>
+      </header>
+
+      {error ? <div className="loading-screen panel-inline-error">{error}</div> : null}
+
+      <section className="crm-grid crm-grid-secondary">
+        <article className="panel-card report-card">
+          <div className="panel-title">
+            <div>
+              <span className="eyebrow">PDF</span>
+              <h3>Informe de stock actual</h3>
+            </div>
+          </div>
+          <p className="report-copy">
+            Exporta todo el catalogo con cada producto, sus colecciones y todas sus variantes
+            ordenadas con SKU, precio y stock actual.
+          </p>
+          <button
+            onClick={() =>
+              handleDownload('stock', '/api/reports/stock.pdf', 'recycled-j-stock.pdf')
+            }
+            disabled={loadingKey === 'stock'}
+          >
+            {loadingKey === 'stock' ? 'Generando PDF...' : 'Descargar informe de stock'}
+          </button>
+        </article>
+
+        <article className="panel-card report-card">
+          <div className="panel-title">
+            <div>
+              <span className="eyebrow">PDF</span>
+              <h3>Informe de ventas del mes</h3>
+            </div>
+          </div>
+          <p className="report-copy">
+            Resume todas las ventas del mes actual por producto, incluyendo numero de pedidos,
+            unidades vendidas e importe total.
+          </p>
+          <button
+            onClick={() =>
+              handleDownload(
+                'monthly-sales',
+                '/api/reports/monthly-sales.pdf',
+                'recycled-j-ventas-mes-actual.pdf'
+              )
+            }
+            disabled={loadingKey === 'monthly-sales'}
+          >
+            {loadingKey === 'monthly-sales'
+              ? 'Generando PDF...'
+              : 'Descargar informe de ventas'}
+          </button>
+        </article>
+      </section>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeView, setActiveView] = useState('inicio');
@@ -974,6 +1079,7 @@ export default function App() {
             ) : null}
             {activeView === 'productos' ? <ProductsView /> : null}
             {activeView === 'pedidos' ? <OrdersView /> : null}
+            {activeView === 'informes' ? <ReportsView /> : null}
           </>
         ) : (
           <div className="loading-screen">

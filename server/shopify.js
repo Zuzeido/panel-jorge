@@ -528,6 +528,135 @@ export async function getOrdersPage({ after = null, first = 50, search = '' } = 
   };
 }
 
+export async function getStockReportData() {
+  const config = await readShopifyConfig();
+
+  if (!hasCredentials(config)) {
+    return {
+      generatedAt: new Date().toISOString(),
+      products: demoProducts
+    };
+  }
+
+  const productNodes = await fetchAllConnectionNodes(config, PRODUCT_PAGE_QUERY, 'products', 25);
+  return {
+    generatedAt: new Date().toISOString(),
+    products: productNodes.map(mapProduct)
+  };
+}
+
+export async function getMonthlySalesReportData() {
+  const config = await readShopifyConfig();
+  const generatedAt = new Date().toISOString();
+
+  const orders = !hasCredentials(config)
+    ? demoOrders
+    : (
+        await fetchAllConnectionNodes(
+          config,
+          `
+            query MonthlyReportOrders($first: Int!, $after: String) {
+              orders(
+                first: $first
+                after: $after
+                sortKey: CREATED_AT
+                reverse: true
+                query: "created_at:>=${getCurrentMonthStartIso()}"
+              ) {
+                nodes {
+                  id
+                  name
+                  createdAt
+                  displayFulfillmentStatus
+                  displayFinancialStatus
+                  totalPriceSet {
+                    shopMoney {
+                      amount
+                      currencyCode
+                    }
+                  }
+                  customer {
+                    displayName
+                  }
+                  lineItems(first: 50) {
+                    nodes {
+                      title
+                      quantity
+                      discountedTotalSet {
+                        shopMoney {
+                          amount
+                          currencyCode
+                        }
+                      }
+                      variant {
+                        product {
+                          title
+                          productType
+                        }
+                      }
+                    }
+                  }
+                }
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+              }
+            }
+          `,
+          'orders',
+          25
+        )
+      ).map(mapOrder);
+
+  const map = new Map();
+  let units = 0;
+  let revenue = 0;
+  const currencyCode = orders[0]?.currencyCode || 'EUR';
+
+  for (const order of orders) {
+    for (const item of order.lineItems || []) {
+      const key = item.productTitle || item.title;
+      const current = map.get(key) || {
+        name: key,
+        orders: new Set(),
+        ordersCount: 0,
+        units: 0,
+        revenue: 0,
+        currencyCode: item.currencyCode || currencyCode
+      };
+
+      current.orders.add(order.id);
+      current.units += Number(item.quantity || 0);
+      current.revenue += Number(item.totalAmount || 0);
+      map.set(key, current);
+      units += Number(item.quantity || 0);
+      revenue += Number(item.totalAmount || 0);
+    }
+  }
+
+  const rows = Array.from(map.values())
+    .map((row) => ({
+      name: row.name,
+      ordersCount: row.orders.size,
+      units: row.units,
+      revenue: row.revenue,
+      currencyCode: row.currencyCode
+    }))
+    .sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name, 'es'));
+
+  return {
+    generatedAt,
+    rows,
+    summary: {
+      ordersCount: orders.length,
+      units,
+      revenue,
+      currencyCode
+    }
+  };
+}
+
 export async function updateProduct(productId, payload) {
   const config = await readShopifyConfig();
 
