@@ -54,6 +54,14 @@ function isExcludedCategory(value) {
   return normalizeText(value) === normalizeText(EXCLUDED_CATEGORY);
 }
 
+function getPrimaryFamily(item) {
+  return item.collections?.[0] || item.productType || 'Sin familia';
+}
+
+function isExcludedLineItem(item) {
+  return isExcludedCategory(item.productType) || item.collections?.some(isExcludedCategory);
+}
+
 function getOrderNonExcludedRevenue(order) {
   const lineItems = order.lineItems || [];
   if (!lineItems.length) {
@@ -61,7 +69,7 @@ function getOrderNonExcludedRevenue(order) {
   }
 
   return lineItems.reduce((sum, item) => {
-    if (isExcludedCategory(item.productType)) {
+    if (isExcludedLineItem(item)) {
       return sum;
     }
 
@@ -124,21 +132,21 @@ function buildDailyTrend(orders, days) {
   return rows;
 }
 
-function buildCategoryPerformance(orders) {
+function buildFamilyPerformance(orders) {
   const map = new Map();
 
   for (const order of orders) {
     for (const item of order.lineItems || []) {
-      const name = item.productType || 'Sin categoria';
-      const current = map.get(name) || {
-        name,
+      const family = getPrimaryFamily(item);
+      const current = map.get(family) || {
+        name: family,
         revenue: 0,
         units: 0
       };
 
       current.revenue += Number(item.totalAmount || 0);
       current.units += Number(item.quantity || 0);
-      map.set(name, current);
+      map.set(family, current);
     }
   }
 
@@ -206,7 +214,7 @@ function buildHomeMetrics(data) {
     unfulfilledOrders,
     paidOrders,
     trend: buildDailyTrend(monthlyOrders, 14),
-    categoryPerformance: buildCategoryPerformance(monthlyOrders),
+    categoryPerformance: buildFamilyPerformance(monthlyOrders),
     customerLeaders: buildCustomerLeaders(monthlyOrders)
   };
 }
@@ -373,7 +381,7 @@ function CategoryPerformance({ rows, currencyCode }) {
       <div className="panel-title">
         <div>
           <span className="eyebrow">Mix</span>
-          <h3>Tipos de producto con mas ingreso</h3>
+          <h3>Familias con mas ingreso</h3>
         </div>
       </div>
 

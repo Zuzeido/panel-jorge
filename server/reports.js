@@ -21,11 +21,12 @@ function monthLabel() {
   }).format(new Date());
 }
 
-function createPdfBuffer(draw) {
+function createPdfBuffer(draw, options = {}) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       margin: 42,
-      size: 'A4'
+      size: 'A4',
+      ...options
     });
     const chunks = [];
 
@@ -80,7 +81,35 @@ function drawKeyValue(doc, left, right, options = {}) {
 }
 
 export async function buildStockReportPdf({ products, generatedAt }) {
-  const orderedProducts = [...products].sort((a, b) => a.title.localeCompare(b.title, 'es'));
+  const orderedRows = [...products]
+    .sort((a, b) => a.title.localeCompare(b.title, 'es'))
+    .flatMap((product) => {
+      const orderedVariants = [...(product.variants || [])].sort((a, b) =>
+        a.title.localeCompare(b.title, 'es')
+      );
+
+      if (!orderedVariants.length) {
+        return [
+          {
+            product: product.title,
+            collections: product.collections?.join(', ') || 'Sin coleccion',
+            variant: '-',
+            sku: '-',
+            price: product.price || '0.00',
+            stock: product.totalInventory ?? 0
+          }
+        ];
+      }
+
+      return orderedVariants.map((variant, index) => ({
+        product: index === 0 ? product.title : '',
+        collections: index === 0 ? product.collections?.join(', ') || 'Sin coleccion' : '',
+        variant: variant.title || 'Variante',
+        sku: variant.sku || '-',
+        price: variant.price || '0.00',
+        stock: variant.inventoryQuantity ?? 0
+      }));
+    });
 
   return createPdfBuffer((doc) => {
     drawHeader(
@@ -89,41 +118,74 @@ export async function buildStockReportPdf({ products, generatedAt }) {
       `Generado el ${formatDate(generatedAt)}`
     );
 
-    orderedProducts.forEach((product) => {
-      const orderedVariants = [...(product.variants || [])].sort((a, b) =>
-        a.title.localeCompare(b.title, 'es')
-      );
+    const columns = [
+      { key: 'product', label: 'Producto', width: 165, align: 'left' },
+      { key: 'collections', label: 'Colecciones', width: 150, align: 'left' },
+      { key: 'variant', label: 'Variante', width: 150, align: 'left' },
+      { key: 'sku', label: 'SKU', width: 95, align: 'left' },
+      { key: 'price', label: 'Precio', width: 70, align: 'right' },
+      { key: 'stock', label: 'Stock', width: 60, align: 'right' }
+    ];
 
-      drawSectionTitle(doc, product.title);
-      drawKeyValue(doc, 'Colecciones', product.collections?.join(', ') || 'Sin coleccion');
-      drawKeyValue(doc, 'Stock total', `${product.totalInventory ?? 0} uds.`);
-      drawKeyValue(doc, 'Estado', product.status || 'Sin estado');
-      drawKeyValue(doc, 'Actualizado', formatDate(product.updatedAt));
+    const tableLeft = doc.page.margins.left;
+    const rowHeight = 22;
 
-      ensureSpace(doc, 26);
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('#17324d');
-      doc.text('Variante', 42, doc.y, { width: 210 });
-      doc.text('SKU', 252, doc.y - 10, { width: 110 });
-      doc.text('Precio', 362, doc.y - 10, { width: 70, align: 'right' });
-      doc.text('Stock', 432, doc.y - 10, { width: 80, align: 'right' });
-      doc.moveDown(0.5);
+    function drawTableHeader() {
+      ensureSpace(doc, 34);
+      let x = tableLeft;
+      const y = doc.y;
 
-      orderedVariants.forEach((variant) => {
-        ensureSpace(doc, 18);
-        doc.font('Helvetica').fontSize(9).fillColor('#243c31');
-        doc.text(variant.title || 'Variante', 42, doc.y, { width: 210 });
-        doc.text(variant.sku || '-', 252, doc.y - 9, { width: 110 });
-        doc.text(formatMoney(variant.price), 362, doc.y - 9, { width: 70, align: 'right' });
-        doc.text(`${variant.inventoryQuantity ?? 0} uds.`, 432, doc.y - 9, {
-          width: 80,
-          align: 'right'
+      doc
+        .rect(tableLeft, y, columns.reduce((sum, column) => sum + column.width, 0), rowHeight)
+        .fill('#e8efe8');
+      doc.fillColor('#17324d').font('Helvetica-Bold').fontSize(9);
+
+      columns.forEach((column) => {
+        doc.text(column.label, x + 6, y + 7, {
+          width: column.width - 12,
+          align: column.align
         });
-        doc.moveDown(0.35);
+        x += column.width;
       });
 
-      doc.moveDown(0.8);
+      doc.y = y + rowHeight + 4;
+    }
+
+    drawTableHeader();
+
+    orderedRows.forEach((row, index) => {
+      ensureSpace(doc, rowHeight + 6);
+      if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        drawTableHeader();
+      }
+
+      const y = doc.y;
+      const fill = index % 2 === 0 ? '#f8faf8' : '#eef3ee';
+      doc
+        .rect(tableLeft, y, columns.reduce((sum, column) => sum + column.width, 0), rowHeight)
+        .fill(fill);
+
+      let x = tableLeft;
+      doc.fillColor('#243c31').font('Helvetica').fontSize(8.5);
+      columns.forEach((column) => {
+        const value =
+          column.key === 'price'
+            ? formatMoney(row.price)
+            : column.key === 'stock'
+              ? `${row.stock} uds.`
+              : row[column.key];
+        doc.text(String(value || ''), x + 6, y + 7, {
+          width: column.width - 12,
+          align: column.align,
+          ellipsis: true
+        });
+        x += column.width;
+      });
+
+      doc.y = y + rowHeight + 2;
     });
-  });
+  }, { layout: 'landscape' });
 }
 
 export async function buildMonthlySalesReportPdf({ rows, summary, generatedAt }) {

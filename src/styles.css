@@ -142,7 +142,7 @@ code {
 .sidebar {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 1.35rem;
   background:
     radial-gradient(circle at top, rgba(207, 186, 114, 0.22), transparent 34%),
@@ -152,11 +152,13 @@ code {
 }
 
 .sidebar-topbar {
-  display: contents;
+  display: block;
 }
 
 .sidebar-panel {
-  display: contents;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
 }
 
 .brand {
@@ -233,6 +235,7 @@ code {
 .sidebar-footer {
   display: grid;
   gap: 0.75rem;
+  margin-top: auto;
 }
 
 .main-area {

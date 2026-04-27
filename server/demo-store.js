@@ -100,7 +100,8 @@ export const demoOrders = [
         totalAmount: '99.81',
         currencyCode: 'EUR',
         productType: 'Sudaderas',
-        productTitle: 'Sudadera Essential'
+        productTitle: 'Sudadera Essential',
+        collections: ['Drop Primavera', 'Best Sellers']
       },
       {
         title: 'Gorra Signature',
@@ -108,7 +109,8 @@ export const demoOrders = [
         totalAmount: '19.99',
         currencyCode: 'EUR',
         productType: 'Accesorios',
-        productTitle: 'Gorra Signature'
+        productTitle: 'Gorra Signature',
+        collections: ['Accesorios', 'Drop Primavera']
       }
     ]
   },
@@ -128,7 +130,8 @@ export const demoOrders = [
         totalAmount: '24.50',
         currencyCode: 'EUR',
         productType: 'HDLR',
-        productTitle: 'Camiseta Wave'
+        productTitle: 'Camiseta Wave',
+        collections: ['HDLR']
       }
     ]
   }

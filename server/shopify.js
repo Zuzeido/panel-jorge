@@ -328,7 +328,10 @@ function mapOrder(node) {
       totalAmount: item.discountedTotalSet?.shopMoney?.amount || '0.00',
       currencyCode: item.discountedTotalSet?.shopMoney?.currencyCode || 'EUR',
       productType: item.variant?.product?.productType || '',
-      productTitle: item.variant?.product?.title || item.title
+      productTitle: item.variant?.product?.title || item.title,
+      collections: (item.variant?.product?.collections?.nodes || [])
+        .map((collection) => collection.title)
+        .filter(Boolean)
     }))
   };
 }
@@ -414,6 +417,11 @@ export async function getStoreData() {
                   product {
                     title
                     productType
+                    collections(first: 10) {
+                      nodes {
+                        title
+                      }
+                    }
                   }
                 }
               }
@@ -592,6 +600,11 @@ export async function getMonthlySalesReportData() {
                         product {
                           title
                           productType
+                          collections(first: 10) {
+                            nodes {
+                              title
+                            }
+                          }
                         }
                       }
                     }
