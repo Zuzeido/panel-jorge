@@ -3,7 +3,7 @@ import cors from 'cors';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getStoreData, updateInventory, updateProduct } from './shopify.js';
+import { getOrdersPage, getProductsPage, getStoreData, updateInventory, updateProduct } from './shopify.js';
 import { createSessionToken, readSessionFromRequest } from './auth.js';
 import { readUsersConfig } from './config.js';
 
@@ -79,6 +79,32 @@ app.post('/api/auth/logout', requireAuth, (req, res) => {
 app.get('/api/dashboard', requireAuth, async (_req, res) => {
   try {
     const data = await getStoreData();
+    return res.json(data);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/products', requireAuth, async (req, res) => {
+  try {
+    const data = await getProductsPage({
+      after: req.query.after || null,
+      first: Number(req.query.first || 50),
+      search: String(req.query.search || '')
+    });
+    return res.json(data);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/orders', requireAuth, async (req, res) => {
+  try {
+    const data = await getOrdersPage({
+      after: req.query.after || null,
+      first: Number(req.query.first || 50),
+      search: String(req.query.search || '')
+    });
     return res.json(data);
   } catch (error) {
     return res.status(500).json({ error: error.message });

@@ -91,8 +91,22 @@ export const demoOrders = [
     currencyCode: 'EUR',
     customerName: 'Lucia Ramos',
     lineItems: [
-      { title: 'Sudadera Essential', quantity: 2 },
-      { title: 'Gorra Signature', quantity: 1 }
+      {
+        title: 'Sudadera Essential',
+        quantity: 2,
+        totalAmount: '99.81',
+        currencyCode: 'EUR',
+        productType: 'Sudaderas',
+        productTitle: 'Sudadera Essential'
+      },
+      {
+        title: 'Gorra Signature',
+        quantity: 1,
+        totalAmount: '19.99',
+        currencyCode: 'EUR',
+        productType: 'Accesorios',
+        productTitle: 'Gorra Signature'
+      }
     ]
   },
   {
@@ -104,7 +118,16 @@ export const demoOrders = [
     totalAmount: '24.50',
     currencyCode: 'EUR',
     customerName: 'Carlos Vega',
-    lineItems: [{ title: 'Camiseta Wave', quantity: 1 }]
+    lineItems: [
+      {
+        title: 'Camiseta Wave',
+        quantity: 1,
+        totalAmount: '24.50',
+        currencyCode: 'EUR',
+        productType: 'HDLR',
+        productTitle: 'Camiseta Wave'
+      }
+    ]
   }
 ];
 

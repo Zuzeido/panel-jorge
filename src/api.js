@@ -52,3 +52,29 @@ export async function logout() {
 export async function fetchDashboard() {
   return request('/api/dashboard');
 }
+
+export async function fetchProductsPage({ after = '', first = 50, search = '' } = {}) {
+  const params = new URLSearchParams();
+  if (after) {
+    params.set('after', after);
+  }
+  params.set('first', String(first));
+  if (search) {
+    params.set('search', search);
+  }
+
+  return request(`/api/products?${params.toString()}`);
+}
+
+export async function fetchOrdersPage({ after = '', first = 50, search = '' } = {}) {
+  const params = new URLSearchParams();
+  if (after) {
+    params.set('after', after);
+  }
+  params.set('first', String(first));
+  if (search) {
+    params.set('search', search);
+  }
+
+  return request(`/api/orders?${params.toString()}`);
+}

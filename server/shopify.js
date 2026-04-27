@@ -1,6 +1,13 @@
 import { demoLocationId, demoOrders, demoProducts } from './demo-store.js';
 import { readShopifyConfig } from './config.js';
 const tokenCache = new Map();
+const MAX_THROTTLE_RETRIES = 5;
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 function hasCredentials(config) {
   return Boolean(
@@ -78,9 +85,24 @@ async function shopifyGraphQL(config, query, variables = {}) {
   const payload = await response.json();
 
   if (payload.errors?.length) {
+    const throttled = payload.errors.some((error) =>
+      String(error.message || '').toLowerCase().includes('throttled')
+    );
     const accessDenied = payload.errors.some(
       (error) => error.extensions?.code === 'ACCESS_DENIED'
     );
+
+    if (throttled) {
+      const throttleStatus = payload.extensions?.cost?.throttleStatus;
+      const currentlyAvailable = Number(throttleStatus?.currentlyAvailable ?? 0);
+      const restoreRate = Number(throttleStatus?.restoreRate ?? 50);
+      const requestedCost = Number(payload.extensions?.cost?.requestedQueryCost ?? 100);
+      const deficit = Math.max(requestedCost - currentlyAvailable, 1);
+      const waitMs = Math.ceil((deficit / Math.max(restoreRate, 1)) * 1000) + 250;
+      const error = new Error('Throttled');
+      error.retryAfterMs = waitMs;
+      throw error;
+    }
 
     if (accessDenied) {
       throw new Error(
@@ -93,6 +115,167 @@ async function shopifyGraphQL(config, query, variables = {}) {
 
   return payload.data;
 }
+
+async function fetchConnectionPage(config, query, rootKey, variables = {}) {
+  let attempt = 0;
+
+  while (attempt <= MAX_THROTTLE_RETRIES) {
+    try {
+      const data = await shopifyGraphQL(config, query, variables);
+      return data[rootKey];
+    } catch (error) {
+      if (error.message !== 'Throttled' || attempt === MAX_THROTTLE_RETRIES) {
+        throw error;
+      }
+
+      await sleep(error.retryAfterMs || 1500);
+      attempt += 1;
+    }
+  }
+
+  throw new Error('No se pudo leer la conexion de Shopify.');
+}
+
+async function fetchAllConnectionNodes(config, query, rootKey, pageSize = 50) {
+  const nodes = [];
+  let cursor = null;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    const connection = await fetchConnectionPage(config, query, rootKey, {
+      first: pageSize,
+      after: cursor
+    });
+    nodes.push(...(connection?.nodes || []));
+    hasNextPage = Boolean(connection?.pageInfo?.hasNextPage);
+    cursor = connection?.pageInfo?.endCursor || null;
+  }
+
+  return nodes;
+}
+
+function getIsoDateDaysAgo(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  date.setUTCHours(0, 0, 0, 0);
+  return date.toISOString();
+}
+
+function buildConnectionResult(nodes, hasNextPage = false, endCursor = null) {
+  return {
+    nodes,
+    pageInfo: {
+      hasNextPage,
+      endCursor
+    }
+  };
+}
+
+function paginateDemoItems(items, after, first) {
+  const startIndex = after ? Number(after) : 0;
+  const nodes = items.slice(startIndex, startIndex + first);
+  const endIndex = startIndex + nodes.length;
+  return buildConnectionResult(nodes, endIndex < items.length, String(endIndex));
+}
+
+const PRODUCT_PAGE_QUERY = `
+  query ProductsPage($first: Int!, $after: String, $query: String) {
+    products(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
+      nodes {
+        id
+        title
+        productType
+        vendor
+        status
+        totalInventory
+        updatedAt
+        tags
+        featuredImage {
+          url
+        }
+        variants(first: 20) {
+          nodes {
+            id
+            title
+            sku
+            price
+            inventoryQuantity
+            inventoryItem {
+              id
+            }
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+const PRODUCT_CATEGORY_QUERY = `
+  query ProductsCategoryPage($first: Int!, $after: String) {
+    products(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+      nodes {
+        id
+        title
+        productType
+        status
+        totalInventory
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+const ORDER_PAGE_QUERY = `
+  query OrdersPage($first: Int!, $after: String, $query: String) {
+    orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {
+      nodes {
+        id
+        name
+        createdAt
+        displayFulfillmentStatus
+        displayFinancialStatus
+        totalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        customer {
+          displayName
+        }
+        lineItems(first: 50) {
+          nodes {
+            title
+            quantity
+            discountedTotalSet {
+              shopMoney {
+                amount
+                currencyCode
+              }
+            }
+            variant {
+              product {
+                title
+                productType
+              }
+            }
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
 
 function mapProduct(node) {
   return {
@@ -128,7 +311,11 @@ function mapOrder(node) {
     customerName: node.customer?.displayName || 'Cliente sin nombre',
     lineItems: (node.lineItems?.nodes || []).map((item) => ({
       title: item.title,
-      quantity: item.quantity
+      quantity: item.quantity,
+      totalAmount: item.discountedTotalSet?.shopMoney?.amount || '0.00',
+      currencyCode: item.discountedTotalSet?.shopMoney?.currencyCode || 'EUR',
+      productType: item.variant?.product?.productType || '',
+      productTitle: item.variant?.product?.title || item.title
     }))
   };
 }
@@ -169,7 +356,7 @@ export async function getStoreData() {
       return {
         source: 'demo',
         locationId: config.locationId || demoLocationId,
-        products: demoProducts,
+        products: demoProducts.slice(0, 4),
         categories: buildCategories(demoProducts),
         orders: demoOrders
       };
@@ -180,38 +367,28 @@ export async function getStoreData() {
     );
   }
 
-  const data = await shopifyGraphQL(
+  const recentProductsConnection = await fetchConnectionPage(
+    config,
+    PRODUCT_PAGE_QUERY,
+    'products',
+    {
+      first: 4,
+      after: null,
+      query: null
+    }
+  );
+
+  const orderNodes = await fetchAllConnectionNodes(
     config,
     `
-      query DashboardData {
-        products(first: 100, sortKey: UPDATED_AT, reverse: true) {
-          nodes {
-            id
-            title
-            productType
-            vendor
-            status
-            totalInventory
-            updatedAt
-            tags
-            featuredImage {
-              url
-            }
-            variants(first: 20) {
-              nodes {
-                id
-                title
-                sku
-                price
-                inventoryQuantity
-                inventoryItem {
-                  id
-                }
-              }
-            }
-          }
-        }
-        orders(first: 50, sortKey: CREATED_AT, reverse: true) {
+      query DashboardOrders($first: Int!, $after: String) {
+        orders(
+          first: $first
+          after: $after
+          sortKey: CREATED_AT
+          reverse: true
+          query: "created_at:>=${getIsoDateDaysAgo(30)}"
+        ) {
           nodes {
             id
             name
@@ -227,14 +404,47 @@ export async function getStoreData() {
             customer {
               displayName
             }
-            lineItems(first: 5) {
+            lineItems(first: 50) {
               nodes {
                 title
                 quantity
+                discountedTotalSet {
+                  shopMoney {
+                    amount
+                    currencyCode
+                  }
+                }
+                variant {
+                  product {
+                    title
+                    productType
+                  }
+                }
               }
             }
           }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
         }
+      }
+    `,
+    'orders',
+    25
+  );
+
+  const categoryProducts = await fetchAllConnectionNodes(
+    config,
+    PRODUCT_CATEGORY_QUERY,
+    'products',
+    50
+  );
+
+  const locationData = await shopifyGraphQL(
+    config,
+    `
+      query DashboardLocations {
         locations(first: 10) {
           nodes {
             id
@@ -244,13 +454,82 @@ export async function getStoreData() {
     `
   );
 
-  const products = data.products.nodes.map(mapProduct);
+  const products = (recentProductsConnection?.nodes || []).map(mapProduct);
   return {
     source: 'shopify',
-    locationId: config.locationId || data.locations.nodes[0]?.id || '',
+    locationId: config.locationId || locationData.locations.nodes[0]?.id || '',
     products,
-    categories: buildCategories(products),
-    orders: data.orders.nodes.map(mapOrder)
+    categories: buildCategories(categoryProducts.map(mapProduct)),
+    orders: orderNodes.map(mapOrder)
+  };
+}
+
+export async function getProductsPage({ after = null, first = 50, search = '' } = {}) {
+  const config = await readShopifyConfig();
+
+  if (!hasCredentials(config)) {
+    const filtered = !search
+      ? demoProducts
+      : demoProducts.filter((product) => {
+          const term = search.toLowerCase();
+          return (
+            product.title.toLowerCase().includes(term) ||
+            product.productType.toLowerCase().includes(term) ||
+            product.vendor.toLowerCase().includes(term)
+          );
+        });
+
+    return {
+      source: 'demo',
+      ...paginateDemoItems(filtered, after, first)
+    };
+  }
+
+  const connection = await fetchConnectionPage(config, PRODUCT_PAGE_QUERY, 'products', {
+    first,
+    after,
+    query: search || null
+  });
+
+  return {
+    source: 'shopify',
+    nodes: (connection?.nodes || []).map(mapProduct),
+    pageInfo: connection?.pageInfo || { hasNextPage: false, endCursor: null }
+  };
+}
+
+export async function getOrdersPage({ after = null, first = 50, search = '' } = {}) {
+  const config = await readShopifyConfig();
+
+  if (!hasCredentials(config)) {
+    const filtered = !search
+      ? demoOrders
+      : demoOrders.filter((order) => {
+          const term = search.toLowerCase();
+          const lines = order.lineItems.map((item) => item.title).join(' ').toLowerCase();
+          return (
+            order.name.toLowerCase().includes(term) ||
+            order.customerName.toLowerCase().includes(term) ||
+            lines.includes(term)
+          );
+        });
+
+    return {
+      source: 'demo',
+      ...paginateDemoItems(filtered, after, first)
+    };
+  }
+
+  const connection = await fetchConnectionPage(config, ORDER_PAGE_QUERY, 'orders', {
+    first,
+    after,
+    query: search || null
+  });
+
+  return {
+    source: 'shopify',
+    nodes: (connection?.nodes || []).map(mapOrder),
+    pageInfo: connection?.pageInfo || { hasNextPage: false, endCursor: null }
   };
 }
 

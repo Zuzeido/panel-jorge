@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { clearToken, fetchDashboard, getToken, loadSession, login, logout } from './api';
+import {
+  clearToken,
+  fetchDashboard,
+  fetchOrdersPage,
+  fetchProductsPage,
+  getToken,
+  loadSession,
+  login,
+  logout
+} from './api';
+
+const BRAND_NAME = 'Recycled J';
+const EXCLUDED_CATEGORY = 'HDLR';
+const TABLE_PAGE_SIZE = 50;
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio' },
@@ -8,16 +21,188 @@ const NAV_ITEMS = [
   { id: 'pedidos', label: 'Pedidos' }
 ];
 
-const currency = new Intl.NumberFormat('es-ES', {
-  style: 'currency',
-  currency: 'EUR'
-});
-
 function formatDate(value) {
   return new Intl.DateTimeFormat('es-ES', {
     dateStyle: 'medium',
     timeStyle: 'short'
   }).format(new Date(value));
+}
+
+function formatMoney(value, currencyCode = 'EUR') {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: currencyCode
+  }).format(Number(value || 0));
+}
+
+function formatCompactMoney(value, currencyCode = 'EUR') {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: currencyCode,
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(Number(value || 0));
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isExcludedCategory(value) {
+  return normalizeText(value) === normalizeText(EXCLUDED_CATEGORY);
+}
+
+function getOrderNonExcludedRevenue(order) {
+  const lineItems = order.lineItems || [];
+  if (!lineItems.length) {
+    return Number(order.totalAmount || 0);
+  }
+
+  return lineItems.reduce((sum, item) => {
+    if (isExcludedCategory(item.productType)) {
+      return sum;
+    }
+
+    return sum + Number(item.totalAmount || 0);
+  }, 0);
+}
+
+function getOrderExcludedRevenue(order) {
+  const totalAmount = Number(order.totalAmount || 0);
+  return Math.max(totalAmount - getOrderNonExcludedRevenue(order), 0);
+}
+
+function getDateKey(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function formatAxisDay(date) {
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: 'short'
+  }).format(date);
+}
+
+function buildDailyTrend(orders, days) {
+  const rows = [];
+  const indexByKey = new Map();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+
+  for (let offset = 0; offset < days; offset += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + offset);
+    const key = getDateKey(date);
+    const row = {
+      key,
+      label: formatAxisDay(date),
+      orders: 0,
+      revenue: 0,
+      netRevenue: 0
+    };
+
+    indexByKey.set(key, row);
+    rows.push(row);
+  }
+
+  for (const order of orders) {
+    const orderDate = new Date(order.createdAt);
+    const key = getDateKey(orderDate);
+    const row = indexByKey.get(key);
+    if (!row) {
+      continue;
+    }
+
+    row.orders += 1;
+    row.revenue += Number(order.totalAmount || 0);
+    row.netRevenue += getOrderNonExcludedRevenue(order);
+  }
+
+  return rows;
+}
+
+function buildCategoryPerformance(orders) {
+  const map = new Map();
+
+  for (const order of orders) {
+    for (const item of order.lineItems || []) {
+      const name = item.productType || 'Sin categoria';
+      const current = map.get(name) || {
+        name,
+        revenue: 0,
+        units: 0
+      };
+
+      current.revenue += Number(item.totalAmount || 0);
+      current.units += Number(item.quantity || 0);
+      map.set(name, current);
+    }
+  }
+
+  return Array.from(map.values())
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+}
+
+function buildCustomerLeaders(orders) {
+  const map = new Map();
+
+  for (const order of orders) {
+    const key = order.customerName || 'Cliente sin nombre';
+    const current = map.get(key) || {
+      name: key,
+      orders: 0,
+      revenue: 0
+    };
+
+    current.orders += 1;
+    current.revenue += Number(order.totalAmount || 0);
+    map.set(key, current);
+  }
+
+  return Array.from(map.values())
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 4);
+}
+
+function buildHomeMetrics(data) {
+  const now = Date.now();
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const monthlyOrders = data.orders.filter((order) => new Date(order.createdAt).getTime() >= thirtyDaysAgo);
+  const currencyCode = monthlyOrders[0]?.currencyCode || data.orders[0]?.currencyCode || 'EUR';
+  const totalRevenue = monthlyOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+  const revenueWithoutExcluded = monthlyOrders.reduce(
+    (sum, order) => sum + getOrderNonExcludedRevenue(order),
+    0
+  );
+  const ordersWithoutExcluded = monthlyOrders.filter(
+    (order) => getOrderNonExcludedRevenue(order) > 0
+  ).length;
+  const excludedRevenue = monthlyOrders.reduce(
+    (sum, order) => sum + getOrderExcludedRevenue(order),
+    0
+  );
+  const unfulfilledOrders = monthlyOrders.filter(
+    (order) => normalizeText(order.displayFulfillmentStatus) !== 'fulfilled'
+  ).length;
+  const paidOrders = monthlyOrders.filter(
+    (order) => normalizeText(order.displayFinancialStatus) === 'paid'
+  ).length;
+
+  return {
+    currencyCode,
+    monthlyOrders,
+    totalRevenue,
+    revenueWithoutExcluded,
+    ordersWithoutExcluded,
+    excludedRevenue,
+    unfulfilledOrders,
+    paidOrders,
+    trend: buildDailyTrend(monthlyOrders, 14),
+    categoryPerformance: buildCategoryPerformance(monthlyOrders),
+    customerLeaders: buildCustomerLeaders(monthlyOrders)
+  };
 }
 
 function LoginScreen({ onLogin, loading, error }) {
@@ -28,10 +213,11 @@ function LoginScreen({ onLogin, loading, error }) {
     <div className="auth-shell">
       <section className="auth-panel">
         <div className="auth-copy">
-          <span className="eyebrow">Shopify CRM</span>
-          <h1>Panel simple para visualizar la tienda.</h1>
+          <span className="eyebrow">CRM Ecommerce</span>
+          <h1>Control comercial de {BRAND_NAME}.</h1>
           <p>
-            Accede con los usuarios definidos en <code>config/users.json</code>.
+            Accede al panel de clientes, pedidos y producto con las credenciales operativas de la
+            tienda.
           </p>
         </div>
 
@@ -59,7 +245,7 @@ function LoginScreen({ onLogin, loading, error }) {
           {error ? <p className="form-error">{error}</p> : null}
 
           <button type="submit" disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? 'Entrando...' : 'Entrar en Recycled J'}
           </button>
         </form>
       </section>
@@ -72,10 +258,10 @@ function Sidebar({ activeView, onChange, user, source, onLogout }) {
     <aside className="sidebar">
       <div>
         <div className="brand">
-          <span className="brand-mark">S</span>
+          <span className="brand-mark">RJ</span>
           <div>
-            <strong>Store Desk</strong>
-            <p>{source === 'shopify' ? 'Shopify' : 'Demo'}</p>
+            <strong>{BRAND_NAME}</strong>
+            <p>{source === 'shopify' ? 'CRM conectado a Shopify' : 'CRM en modo demo'}</p>
           </div>
         </div>
 
@@ -105,55 +291,221 @@ function Sidebar({ activeView, onChange, user, source, onLogout }) {
   );
 }
 
-function SummaryCards({ products, categories, orders }) {
-  const totalInventory = products.reduce((sum, product) => sum + (product.totalInventory || 0), 0);
-  const lowStock = products.filter((product) => product.totalInventory < 10).length;
+function MetricCard({ label, value, meta, tone = 'default' }) {
+  return (
+    <article className={`metric-card metric-card-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{meta}</p>
+    </article>
+  );
+}
 
-  const cards = [
-    { label: 'Productos', value: products.length },
-    { label: 'Categorias', value: categories.length },
-    { label: 'Pedidos', value: orders.length },
-    { label: 'Stock bajo', value: lowStock },
-    { label: 'Unidades', value: totalInventory }
-  ];
+function MetricDivider() {
+  return (
+    <div className="metric-divider">
+      <span>Sin {EXCLUDED_CATEGORY}</span>
+    </div>
+  );
+}
+
+function TrendChart({ title, points, valueKey, tone, formatter, footer }) {
+  const maxValue = Math.max(...points.map((point) => point[valueKey]), 1);
 
   return (
-    <section className="stats-grid">
-      {cards.map((card) => (
-        <article key={card.label} className="stat-card">
-          <span>{card.label}</span>
-          <strong>{card.value}</strong>
-        </article>
-      ))}
-    </section>
+    <article className="panel-card chart-card">
+      <div className="panel-title">
+        <div>
+          <span className="eyebrow">Tendencia</span>
+          <h3>{title}</h3>
+        </div>
+        <strong>{footer}</strong>
+      </div>
+
+      <div className="chart-bars">
+        {points.map((point) => (
+          <div key={point.key} className="chart-column">
+            <span
+              className={`chart-bar chart-bar-${tone}`}
+              style={{ height: `${Math.max((point[valueKey] / maxValue) * 100, 8)}%` }}
+              title={`${point.label}: ${formatter(point[valueKey])}`}
+            />
+            <strong>{formatter(point[valueKey])}</strong>
+            <p>{point.label}</p>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function CategoryPerformance({ rows, currencyCode }) {
+  const maxRevenue = Math.max(...rows.map((row) => row.revenue), 1);
+
+  return (
+    <article className="panel-card">
+      <div className="panel-title">
+        <div>
+          <span className="eyebrow">Mix</span>
+          <h3>Categorias con mas ingreso</h3>
+        </div>
+      </div>
+
+      <div className="performance-list">
+        {rows.map((row) => (
+          <div key={row.name} className="performance-row">
+            <div className="performance-copy">
+              <strong>{row.name}</strong>
+              <p>{row.units} uds. vendidas</p>
+            </div>
+            <div className="performance-bar-wrap">
+              <span
+                className="performance-bar"
+                style={{ width: `${Math.max((row.revenue / maxRevenue) * 100, 12)}%` }}
+              />
+            </div>
+            <strong>{formatMoney(row.revenue, currencyCode)}</strong>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function CustomerLeaders({ rows, currencyCode }) {
+  return (
+    <article className="panel-card">
+      <div className="panel-title">
+        <div>
+          <span className="eyebrow">Clientes</span>
+          <h3>Top compradores del mes</h3>
+        </div>
+      </div>
+
+      <div className="mini-list">
+        {rows.map((row) => (
+          <div key={row.name} className="mini-row">
+            <div>
+              <strong>{row.name}</strong>
+              <p>{row.orders} pedidos</p>
+            </div>
+            <span>{formatMoney(row.revenue, currencyCode)}</span>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function LoadMoreButton({ loadedCount, hasNextPage, loading, onClick, label }) {
+  if (!hasNextPage) {
+    return null;
+  }
+
+  return (
+    <div className="load-more-wrap">
+      <button className="secondary-button" onClick={onClick} disabled={loading}>
+        {loading ? 'Cargando...' : `Cargar 50 mas ${label}`}
+      </button>
+      <p>Mostrando {loadedCount} elementos</p>
+    </div>
   );
 }
 
 function HomeView({ data }) {
+  const metrics = useMemo(() => buildHomeMetrics(data), [data]);
   const recentOrders = data.orders.slice(0, 5);
   const recentProducts = [...data.products]
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-    .slice(0, 5);
+    .slice(0, 4);
 
   return (
     <div className="page-content">
-      <header className="page-header">
+      <header className="page-header page-header-wide">
         <div>
-          <span className="eyebrow">Resumen</span>
-          <h2>Vista general</h2>
+          <span className="eyebrow">CRM Recycled J</span>
+          <h2>Inicio comercial</h2>
+          <p className="page-header-copy">
+            Vista del ultimo mes con foco en pedidos, facturacion y peso de la categoria{' '}
+            {EXCLUDED_CATEGORY}.
+          </p>
+        </div>
+
+        <div className="status-cluster">
+          <div className="status-chip">
+            <strong>{metrics.paidOrders}</strong>
+            <span>Pagados</span>
+          </div>
+          <div className="status-chip">
+            <strong>{metrics.unfulfilledOrders}</strong>
+            <span>Pendientes</span>
+          </div>
+          <div className="status-chip">
+            <strong>{formatCompactMoney(metrics.excludedRevenue, metrics.currencyCode)}</strong>
+            <span>Peso HDLR</span>
+          </div>
         </div>
       </header>
 
-      <SummaryCards
-        products={data.products}
-        categories={data.categories}
-        orders={data.orders}
-      />
+      <section className="metrics-grid">
+        <MetricCard
+          label="Pedidos ultimo mes"
+          value={metrics.monthlyOrders.length}
+          meta="Volumen total de pedidos en los ultimos 30 dias."
+          tone="accent"
+        />
+        <MetricCard
+          label="Facturacion ultimo mes"
+          value={formatMoney(metrics.totalRevenue, metrics.currencyCode)}
+          meta="Importe total registrado por Shopify."
+          tone="accent"
+        />
+        <MetricDivider />
+        <MetricCard
+          label={`Pedidos sin ${EXCLUDED_CATEGORY}`}
+          value={metrics.ordersWithoutExcluded}
+          meta="Pedidos con ingresos fuera de esa categoria."
+          tone="neutral"
+        />
+        <MetricCard
+          label={`Facturacion sin ${EXCLUDED_CATEGORY}`}
+          value={formatMoney(metrics.revenueWithoutExcluded, metrics.currencyCode)}
+          meta="Ingresos netos excluyendo esa categoria."
+          tone="neutral"
+        />
+      </section>
 
-      <section className="simple-grid">
+      <section className="crm-grid">
+        <TrendChart
+          title="Pedidos por dia"
+          points={metrics.trend}
+          valueKey="orders"
+          tone="orders"
+          formatter={(value) => String(value)}
+          footer={`${metrics.monthlyOrders.length} pedidos`}
+        />
+        <TrendChart
+          title="Facturacion diaria"
+          points={metrics.trend}
+          valueKey="netRevenue"
+          tone="revenue"
+          formatter={(value) => formatCompactMoney(value, metrics.currencyCode)}
+          footer={formatMoney(metrics.revenueWithoutExcluded, metrics.currencyCode)}
+        />
+      </section>
+
+      <section className="crm-grid crm-grid-secondary">
+        <CategoryPerformance rows={metrics.categoryPerformance} currencyCode={metrics.currencyCode} />
+        <CustomerLeaders rows={metrics.customerLeaders} currencyCode={metrics.currencyCode} />
+      </section>
+
+      <section className="crm-grid crm-grid-secondary">
         <article className="panel-card">
           <div className="panel-title">
-            <h3>Ultimos productos</h3>
+            <div>
+              <span className="eyebrow">Catalogo</span>
+              <h3>Ultimos productos actualizados</h3>
+            </div>
           </div>
           <div className="mini-list">
             {recentProducts.map((product) => (
@@ -170,7 +522,10 @@ function HomeView({ data }) {
 
         <article className="panel-card">
           <div className="panel-title">
-            <h3>Ultimos pedidos</h3>
+            <div>
+              <span className="eyebrow">Pedidos</span>
+              <h3>Actividad reciente</h3>
+            </div>
           </div>
           <div className="mini-list">
             {recentOrders.map((order) => (
@@ -179,7 +534,7 @@ function HomeView({ data }) {
                   <strong>{order.name}</strong>
                   <p>{order.customerName}</p>
                 </div>
-                <span>{currency.format(Number(order.totalAmount))}</span>
+                <span>{formatMoney(order.totalAmount, order.currencyCode)}</span>
               </div>
             ))}
           </div>
@@ -194,7 +549,7 @@ function CategoriesView({ categories }) {
     <div className="page-content">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Catalogo</span>
+          <span className="eyebrow">CRM Recycled J</span>
           <h2>Categorias</h2>
         </div>
       </header>
@@ -219,38 +574,103 @@ function CategoriesView({ categories }) {
   );
 }
 
-function ProductsView({ data }) {
+function ProductsView() {
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [products, setProducts] = useState([]);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [cursor, setCursor] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
 
-  const filteredProducts = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) {
-      return data.products;
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFirstPage() {
+      try {
+        setLoading(true);
+        setError('');
+        const data = await fetchProductsPage({
+          first: TABLE_PAGE_SIZE,
+          search
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setProducts(data.nodes || []);
+        setHasNextPage(Boolean(data.pageInfo?.hasNextPage));
+        setCursor(data.pageInfo?.endCursor || '');
+      } catch (requestError) {
+        if (!cancelled) {
+          setProducts([]);
+          setHasNextPage(false);
+          setCursor('');
+          setError(requestError.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
 
-    return data.products.filter((product) => {
-      return (
-        product.title.toLowerCase().includes(term) ||
-        product.productType.toLowerCase().includes(term) ||
-        product.vendor.toLowerCase().includes(term)
-      );
-    });
-  }, [data.products, search]);
+    loadFirstPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [search]);
+
+  async function handleLoadMore() {
+    try {
+      setLoadingMore(true);
+      const data = await fetchProductsPage({
+        first: TABLE_PAGE_SIZE,
+        after: cursor,
+        search
+      });
+      setProducts((current) => [...current, ...(data.nodes || [])]);
+      setHasNextPage(Boolean(data.pageInfo?.hasNextPage));
+      setCursor(data.pageInfo?.endCursor || '');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <div className="page-content">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Catalogo</span>
+          <span className="eyebrow">CRM Recycled J</span>
           <h2>Productos</h2>
         </div>
-        <input
-          className="search-input"
-          placeholder="Buscar producto"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+        <div className="table-toolbar">
+          <input
+            className="search-input"
+            placeholder="Buscar producto"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+          />
+          <p>{loading ? 'Buscando...' : `${products.length} cargados`}</p>
+        </div>
       </header>
+
+      {error ? <div className="loading-screen panel-inline-error">{error}</div> : null}
 
       <section className="table-card">
         <div className="table-head products-table">
@@ -261,7 +681,7 @@ function ProductsView({ data }) {
           <span>Stock</span>
           <span>Actualizado</span>
         </div>
-        {filteredProducts.map((product) => (
+        {products.map((product) => (
           <div key={product.id} className="table-row products-table">
             <div className="title-cell">
               <strong>{product.title}</strong>
@@ -277,19 +697,115 @@ function ProductsView({ data }) {
           </div>
         ))}
       </section>
+
+      <LoadMoreButton
+        loadedCount={products.length}
+        hasNextPage={hasNextPage}
+        loading={loadingMore}
+        onClick={handleLoadMore}
+        label="productos"
+      />
     </div>
   );
 }
 
-function OrdersView({ orders }) {
+function OrdersView() {
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [orders, setOrders] = useState([]);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [cursor, setCursor] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFirstPage() {
+      try {
+        setLoading(true);
+        setError('');
+        const data = await fetchOrdersPage({
+          first: TABLE_PAGE_SIZE,
+          search
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setOrders(data.nodes || []);
+        setHasNextPage(Boolean(data.pageInfo?.hasNextPage));
+        setCursor(data.pageInfo?.endCursor || '');
+      } catch (requestError) {
+        if (!cancelled) {
+          setOrders([]);
+          setHasNextPage(false);
+          setCursor('');
+          setError(requestError.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadFirstPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [search]);
+
+  async function handleLoadMore() {
+    try {
+      setLoadingMore(true);
+      const data = await fetchOrdersPage({
+        first: TABLE_PAGE_SIZE,
+        after: cursor,
+        search
+      });
+      setOrders((current) => [...current, ...(data.nodes || [])]);
+      setHasNextPage(Boolean(data.pageInfo?.hasNextPage));
+      setCursor(data.pageInfo?.endCursor || '');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   return (
     <div className="page-content">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Ventas</span>
+          <span className="eyebrow">CRM Recycled J</span>
           <h2>Pedidos</h2>
         </div>
+        <div className="table-toolbar">
+          <input
+            className="search-input"
+            placeholder="Buscar pedido o cliente"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+          />
+          <p>{loading ? 'Buscando...' : `${orders.length} cargados`}</p>
+        </div>
       </header>
+
+      {error ? <div className="loading-screen panel-inline-error">{error}</div> : null}
 
       <section className="table-card">
         <div className="table-head orders-table-grid">
@@ -307,13 +823,21 @@ function OrdersView({ orders }) {
               <p>{order.lineItems.map((item) => `${item.title} x${item.quantity}`).join(', ')}</p>
             </div>
             <span>{order.customerName}</span>
-            <span>{currency.format(Number(order.totalAmount))}</span>
+            <span>{formatMoney(order.totalAmount, order.currencyCode)}</span>
             <span>{order.displayFinancialStatus}</span>
             <span>{order.displayFulfillmentStatus}</span>
             <span>{formatDate(order.createdAt)}</span>
           </div>
         ))}
       </section>
+
+      <LoadMoreButton
+        loadedCount={orders.length}
+        hasNextPage={hasNextPage}
+        loading={loadingMore}
+        onClick={handleLoadMore}
+        label="pedidos"
+      />
     </div>
   );
 }
@@ -404,7 +928,7 @@ export default function App() {
   }
 
   if (loading) {
-    return <div className="loading-screen">Cargando panel...</div>;
+    return <div className="loading-screen">Cargando CRM de {BRAND_NAME}...</div>;
   }
 
   if (!user) {
@@ -426,8 +950,12 @@ export default function App() {
           <>
             <div className="toolbar">
               <div>
-                <strong>Panel de visualizacion</strong>
-                <p>{dashboard.source === 'shopify' ? 'Datos reales sincronizados.' : 'Datos demo cargados.'}</p>
+                <strong>CRM operativo de {BRAND_NAME}</strong>
+                <p>
+                  {dashboard.source === 'shopify'
+                    ? 'Datos reales sincronizados con Shopify.'
+                    : 'Datos demo cargados para revisar el panel.'}
+                </p>
               </div>
               <button className="secondary-button" onClick={refreshDashboard}>
                 Recargar
@@ -438,8 +966,8 @@ export default function App() {
             {activeView === 'categorias' ? (
               <CategoriesView categories={dashboard.categories} />
             ) : null}
-            {activeView === 'productos' ? <ProductsView data={dashboard} /> : null}
-            {activeView === 'pedidos' ? <OrdersView orders={dashboard.orders} /> : null}
+            {activeView === 'productos' ? <ProductsView /> : null}
+            {activeView === 'pedidos' ? <OrdersView /> : null}
           </>
         ) : (
           <div className="loading-screen">
