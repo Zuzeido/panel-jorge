@@ -16,7 +16,7 @@ const TABLE_PAGE_SIZE = 50;
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio' },
-  { id: 'categorias', label: 'Categorias' },
+  { id: 'colecciones', label: 'Colecciones' },
   { id: 'productos', label: 'Productos' },
   { id: 'pedidos', label: 'Pedidos' }
 ];
@@ -167,9 +167,13 @@ function buildCustomerLeaders(orders) {
 }
 
 function buildHomeMetrics(data) {
-  const now = Date.now();
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-  const monthlyOrders = data.orders.filter((order) => new Date(order.createdAt).getTime() >= thirtyDaysAgo);
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthStartTime = monthStart.getTime();
+  const monthlyOrders = data.orders.filter(
+    (order) => new Date(order.createdAt).getTime() >= monthStartTime
+  );
   const currencyCode = monthlyOrders[0]?.currencyCode || data.orders[0]?.currencyCode || 'EUR';
   const totalRevenue = monthlyOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
   const revenueWithoutExcluded = monthlyOrders.reduce(
@@ -347,7 +351,7 @@ function CategoryPerformance({ rows, currencyCode }) {
       <div className="panel-title">
         <div>
           <span className="eyebrow">Mix</span>
-          <h3>Categorias con mas ingreso</h3>
+          <h3>Tipos de producto con mas ingreso</h3>
         </div>
       </div>
 
@@ -426,7 +430,7 @@ function HomeView({ data }) {
           <span className="eyebrow">CRM Recycled J</span>
           <h2>Inicio comercial</h2>
           <p className="page-header-copy">
-            Vista del ultimo mes con foco en pedidos, facturacion y peso de la categoria{' '}
+            Vista del mes actual con foco en pedidos, facturacion y peso de la categoria{' '}
             {EXCLUDED_CATEGORY}.
           </p>
         </div>
@@ -449,13 +453,13 @@ function HomeView({ data }) {
 
       <section className="metrics-grid">
         <MetricCard
-          label="Pedidos ultimo mes"
+          label="Pedidos del mes"
           value={metrics.monthlyOrders.length}
-          meta="Volumen total de pedidos en los ultimos 30 dias."
+          meta="Volumen total desde el dia 1 del mes actual."
           tone="accent"
         />
         <MetricCard
-          label="Facturacion ultimo mes"
+          label="Facturacion del mes"
           value={formatMoney(metrics.totalRevenue, metrics.currencyCode)}
           meta="Importe total registrado por Shopify."
           tone="accent"
@@ -544,29 +548,31 @@ function HomeView({ data }) {
   );
 }
 
-function CategoriesView({ categories }) {
+function CollectionsView({ collections }) {
   return (
     <div className="page-content">
       <header className="page-header">
         <div>
           <span className="eyebrow">CRM Recycled J</span>
-          <h2>Categorias</h2>
+          <h2>Colecciones</h2>
         </div>
       </header>
 
       <section className="table-card">
-        <div className="table-head categories-table">
-          <span>Categoria</span>
+        <div className="table-head collections-table">
+          <span>Coleccion</span>
+          <span>Handle</span>
+          <span>Tipo</span>
           <span>Productos</span>
-          <span>Stock</span>
-          <span>Estados</span>
+          <span>Actualizada</span>
         </div>
-        {categories.map((category) => (
-          <div key={category.id} className="table-row categories-table">
-            <strong>{category.name}</strong>
-            <span>{category.productsCount}</span>
-            <span>{category.totalInventory}</span>
-            <span>{category.statuses.join(', ')}</span>
+        {collections.map((collection) => (
+          <div key={collection.id} className="table-row collections-table">
+            <strong>{collection.name}</strong>
+            <span>{collection.handle}</span>
+            <span>{collection.type}</span>
+            <span>{collection.productsCount}</span>
+            <span>{formatDate(collection.updatedAt)}</span>
           </div>
         ))}
       </section>
@@ -963,8 +969,8 @@ export default function App() {
             </div>
 
             {activeView === 'inicio' ? <HomeView data={dashboard} /> : null}
-            {activeView === 'categorias' ? (
-              <CategoriesView categories={dashboard.categories} />
+            {activeView === 'colecciones' ? (
+              <CollectionsView collections={dashboard.collections || []} />
             ) : null}
             {activeView === 'productos' ? <ProductsView /> : null}
             {activeView === 'pedidos' ? <OrdersView /> : null}

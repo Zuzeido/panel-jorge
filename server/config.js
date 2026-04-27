@@ -61,17 +61,22 @@ export async function readUsersConfig() {
 export async function readShopifyConfig() {
   const envConfig = parseJsonEnv('SHOPIFY_CONFIG_JSON') || {};
   const fileConfig = (await readJsonFile(SHOPIFY_PATH)) || {};
+  const accessToken =
+    readEnvValue('SHOPIFY_ACCESS_TOKEN') ?? envConfig.accessToken ?? fileConfig.accessToken ?? '';
+  const usingAccessToken = Boolean(accessToken);
 
   return {
     ...fileConfig,
     ...envConfig,
     storeDomain:
       readEnvValue('SHOPIFY_STORE_DOMAIN') ?? envConfig.storeDomain ?? fileConfig.storeDomain ?? '',
-    apiKey: readEnvValue('SHOPIFY_API_KEY') ?? envConfig.apiKey ?? fileConfig.apiKey ?? '',
-    apiSecret:
-      readEnvValue('SHOPIFY_API_SECRET') ?? envConfig.apiSecret ?? fileConfig.apiSecret ?? '',
-    accessToken:
-      readEnvValue('SHOPIFY_ACCESS_TOKEN') ?? envConfig.accessToken ?? fileConfig.accessToken ?? '',
+    apiKey: usingAccessToken
+      ? ''
+      : readEnvValue('SHOPIFY_API_KEY') ?? envConfig.apiKey ?? fileConfig.apiKey ?? '',
+    apiSecret: usingAccessToken
+      ? ''
+      : readEnvValue('SHOPIFY_API_SECRET') ?? envConfig.apiSecret ?? fileConfig.apiSecret ?? '',
+    accessToken,
     apiVersion:
       readEnvValue('SHOPIFY_API_VERSION') ??
       envConfig.apiVersion ??

@@ -1,4 +1,4 @@
-import { demoLocationId, demoOrders, demoProducts } from './demo-store.js';
+import { demoCollections, demoLocationId, demoOrders, demoProducts } from './demo-store.js';
 import { readShopifyConfig } from './config.js';
 const tokenCache = new Map();
 const MAX_THROTTLE_RETRIES = 5;
@@ -154,9 +154,9 @@ async function fetchAllConnectionNodes(config, query, rootKey, pageSize = 50) {
   return nodes;
 }
 
-function getIsoDateDaysAgo(days) {
+function getCurrentMonthStartIso() {
   const date = new Date();
-  date.setUTCDate(date.getUTCDate() - days);
+  date.setUTCDate(1);
   date.setUTCHours(0, 0, 0, 0);
   return date.toISOString();
 }
@@ -214,15 +214,20 @@ const PRODUCT_PAGE_QUERY = `
   }
 `;
 
-const PRODUCT_CATEGORY_QUERY = `
-  query ProductsCategoryPage($first: Int!, $after: String) {
-    products(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+const COLLECTION_PAGE_QUERY = `
+  query CollectionsPage($first: Int!, $after: String) {
+    collections(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
       nodes {
         id
         title
-        productType
-        status
-        totalInventory
+        handle
+        updatedAt
+        ruleSet {
+          appliedDisjunctively
+        }
+        productsCount {
+          count
+        }
       }
       pageInfo {
         hasNextPage
@@ -320,32 +325,15 @@ function mapOrder(node) {
   };
 }
 
-function buildCategories(products) {
-  const map = new Map();
-
-  for (const product of products) {
-    const key = product.productType || 'Sin categoria';
-    const current = map.get(key) || {
-      id: key.toLowerCase().replace(/\s+/g, '-'),
-      name: key,
-      productsCount: 0,
-      totalInventory: 0,
-      statuses: new Set()
-    };
-
-    current.productsCount += 1;
-    current.totalInventory += product.totalInventory || 0;
-    current.statuses.add(product.status);
-    map.set(key, current);
-  }
-
-  return Array.from(map.values()).map((category) => ({
-    id: category.id,
-    name: category.name,
-    productsCount: category.productsCount,
-    totalInventory: category.totalInventory,
-    statuses: Array.from(category.statuses)
-  }));
+function mapCollection(node) {
+  return {
+    id: node.id,
+    name: node.title,
+    handle: node.handle,
+    productsCount: node.productsCount?.count ?? 0,
+    type: node.ruleSet ? 'Smart' : 'Manual',
+    updatedAt: node.updatedAt
+  };
 }
 
 export async function getStoreData() {
@@ -357,7 +345,7 @@ export async function getStoreData() {
         source: 'demo',
         locationId: config.locationId || demoLocationId,
         products: demoProducts.slice(0, 4),
-        categories: buildCategories(demoProducts),
+        collections: demoCollections,
         orders: demoOrders
       };
     }
@@ -387,7 +375,7 @@ export async function getStoreData() {
           after: $after
           sortKey: CREATED_AT
           reverse: true
-          query: "created_at:>=${getIsoDateDaysAgo(30)}"
+          query: "created_at:>=${getCurrentMonthStartIso()}"
         ) {
           nodes {
             id
@@ -434,10 +422,10 @@ export async function getStoreData() {
     25
   );
 
-  const categoryProducts = await fetchAllConnectionNodes(
+  const collectionNodes = await fetchAllConnectionNodes(
     config,
-    PRODUCT_CATEGORY_QUERY,
-    'products',
+    COLLECTION_PAGE_QUERY,
+    'collections',
     50
   );
 
@@ -459,7 +447,7 @@ export async function getStoreData() {
     source: 'shopify',
     locationId: config.locationId || locationData.locations.nodes[0]?.id || '',
     products,
-    categories: buildCategories(categoryProducts.map(mapProduct)),
+    collections: collectionNodes.map(mapCollection),
     orders: orderNodes.map(mapOrder)
   };
 }

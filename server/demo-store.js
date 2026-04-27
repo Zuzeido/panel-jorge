@@ -131,4 +131,31 @@ export const demoOrders = [
   }
 ];
 
+export const demoCollections = [
+  {
+    id: 'gid://shopify/Collection/1',
+    name: 'Drop Primavera',
+    handle: 'drop-primavera',
+    productsCount: 12,
+    type: 'Manual',
+    updatedAt: '2026-04-26T09:20:00Z'
+  },
+  {
+    id: 'gid://shopify/Collection/2',
+    name: 'HDLR',
+    handle: 'hdlr',
+    productsCount: 8,
+    type: 'Smart',
+    updatedAt: '2026-04-25T14:10:00Z'
+  },
+  {
+    id: 'gid://shopify/Collection/3',
+    name: 'Accesorios',
+    handle: 'accesorios',
+    productsCount: 5,
+    type: 'Manual',
+    updatedAt: '2026-04-24T11:00:00Z'
+  }
+];
+
 export const demoLocationId = 'gid://shopify/Location/1';
