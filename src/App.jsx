@@ -995,6 +995,20 @@ function ReportsView() {
             Genera el mismo informe mensual del mes seleccionado, pero excluyendo toda venta
             asociada a la familia o coleccion HDLR.
           </p>
+          <label className="report-filter">
+            <span>Mes del informe</span>
+            <select
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              disabled={loadingKey === 'monthly-sales' || loadingKey === 'monthly-sales-without-hdlr'}
+            >
+              {REPORT_MONTH_OPTIONS.map((month) => (
+                <option key={month.value} value={month.value}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={() =>
               handleDownload(
