@@ -19,7 +19,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -48,6 +49,15 @@ input {
   border-radius: 14px;
   padding: 0.85rem 0.95rem;
   background: rgba(255, 255, 255, 0.9);
+}
+
+select {
+  width: 100%;
+  border: 1px solid #d5ddd9;
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: inherit;
 }
 
 code {
@@ -499,6 +509,21 @@ code {
 .report-copy {
   margin: 0;
   color: #5f6f69;
+}
+
+.report-filter {
+  display: grid;
+  gap: 0.45rem;
+  color: #243c31;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.report-filter span {
+  color: #5f6f69;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .table-card {

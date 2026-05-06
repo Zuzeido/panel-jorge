@@ -135,12 +135,14 @@ app.get('/api/reports/stock.pdf', requireAuth, async (_req, res) => {
 
 app.get('/api/reports/monthly-sales.pdf', requireAuth, async (_req, res) => {
   try {
-    const payload = await getMonthlySalesReportData();
+    const reportMonth = Number(_req.query.month || 0);
+    const reportYear = Number(_req.query.year || 0);
+    const payload = await getMonthlySalesReportData({ month: reportMonth, year: reportYear });
     const pdfBuffer = await buildMonthlySalesReportPdf(payload);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      'attachment; filename="recycled-j-ventas-mes-actual.pdf"'
+      `attachment; filename="recycled-j-ventas-${payload.summary.year}-${String(payload.summary.month).padStart(2, '0')}.pdf"`
     );
     return res.send(pdfBuffer);
   } catch (error) {
@@ -150,12 +152,17 @@ app.get('/api/reports/monthly-sales.pdf', requireAuth, async (_req, res) => {
 
 app.get('/api/reports/monthly-sales-without-hdlr.pdf', requireAuth, async (_req, res) => {
   try {
-    const payload = await getMonthlySalesReportWithoutHdlrData();
+    const reportMonth = Number(_req.query.month || 0);
+    const reportYear = Number(_req.query.year || 0);
+    const payload = await getMonthlySalesReportWithoutHdlrData({
+      month: reportMonth,
+      year: reportYear
+    });
     const pdfBuffer = await buildMonthlySalesReportPdf(payload);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      'attachment; filename="recycled-j-ventas-mes-actual-sin-hdlr.pdf"'
+      `attachment; filename="recycled-j-ventas-${payload.summary.year}-${String(payload.summary.month).padStart(2, '0')}-sin-hdlr.pdf"`
     );
     return res.send(pdfBuffer);
   } catch (error) {

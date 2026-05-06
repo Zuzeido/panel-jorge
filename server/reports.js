@@ -14,11 +14,11 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function monthLabel() {
+function monthLabel(dateValue = new Date()) {
   return new Intl.DateTimeFormat('es-ES', {
     month: 'long',
     year: 'numeric'
-  }).format(new Date());
+  }).format(new Date(dateValue));
 }
 
 function createPdfBuffer(draw, options = {}) {
@@ -190,13 +190,16 @@ export async function buildStockReportPdf({ products, generatedAt }) {
 
 export async function buildMonthlySalesReportPdf({ rows, summary, generatedAt }) {
   return createPdfBuffer((doc) => {
+    const reportMonthLabel = summary.monthLabel || monthLabel();
     drawHeader(
       doc,
       summary.excludeHdlr
         ? 'Recycled J - Informe de ventas del mes sin HDLR'
         : 'Recycled J - Informe de ventas del mes',
       `${
-        summary.excludeHdlr ? 'Mes actual sin familia/coleccion HDLR' : `Mes actual: ${monthLabel()}`
+        summary.excludeHdlr
+          ? `${reportMonthLabel} sin familia/coleccion HDLR`
+          : `Mes: ${reportMonthLabel}`
       } · generado el ${formatDate(generatedAt)}`
     );
 

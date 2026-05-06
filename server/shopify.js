@@ -154,11 +154,37 @@ async function fetchAllConnectionNodes(config, query, rootKey, pageSize = 50) {
   return nodes;
 }
 
-function getCurrentMonthStartIso() {
-  const date = new Date();
-  date.setUTCDate(1);
-  date.setUTCHours(0, 0, 0, 0);
-  return date.toISOString();
+function normalizeReportPeriod({ month, year } = {}) {
+  const currentDate = new Date();
+  const normalizedMonth =
+    Number.isInteger(month) && month >= 1 && month <= 12 ? month : currentDate.getUTCMonth() + 1;
+  const normalizedYear =
+    Number.isInteger(year) && year >= 2000 && year <= 3000 ? year : currentDate.getUTCFullYear();
+  return {
+    month: normalizedMonth,
+    year: normalizedYear
+  };
+}
+
+function getMonthRangeIso(period) {
+  const normalized = normalizeReportPeriod(period);
+  const start = new Date(Date.UTC(normalized.year, normalized.month - 1, 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(normalized.year, normalized.month, 1, 0, 0, 0, 0));
+  return {
+    ...normalized,
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+    label: new Intl.DateTimeFormat('es-ES', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC'
+    }).format(start)
+  };
+}
+
+function isOrderWithinRange(order, range) {
+  const orderTime = new Date(order.createdAt).getTime();
+  return orderTime >= new Date(range.startIso).getTime() && orderTime < new Date(range.endIso).getTime();
 }
 
 function buildConnectionResult(nodes, hasNextPage = false, endCursor = null) {
@@ -553,19 +579,20 @@ export async function getStockReportData() {
   };
 }
 
-export async function getMonthlySalesReportData() {
-  return getMonthlySalesReportDataBase({ excludeHdlr: false });
+export async function getMonthlySalesReportData(period = {}) {
+  return getMonthlySalesReportDataBase({ excludeHdlr: false, ...period });
 }
 
-export async function getMonthlySalesReportWithoutHdlrData() {
-  return getMonthlySalesReportDataBase({ excludeHdlr: true });
+export async function getMonthlySalesReportWithoutHdlrData(period = {}) {
+  return getMonthlySalesReportDataBase({ excludeHdlr: true, ...period });
 }
 
-async function getMonthlySalesReportDataBase({ excludeHdlr }) {
+async function getMonthlySalesReportDataBase({ excludeHdlr, month, year }) {
   const config = await readShopifyConfig();
   const generatedAt = new Date().toISOString();
+  const range = getMonthRangeIso({ month, year });
 
-  const orders = !hasCredentials(config)
+  const orders = (!hasCredentials(config)
     ? demoOrders
     : (
         await fetchAllConnectionNodes(
@@ -577,7 +604,7 @@ async function getMonthlySalesReportDataBase({ excludeHdlr }) {
                 after: $after
                 sortKey: CREATED_AT
                 reverse: true
-                query: "created_at:>=${getCurrentMonthStartIso()}"
+                query: "created_at:>=${range.startIso} created_at:<${range.endIso}"
               ) {
                 nodes {
                   id
@@ -628,7 +655,9 @@ async function getMonthlySalesReportDataBase({ excludeHdlr }) {
           'orders',
           25
         )
-      ).map(mapOrder);
+      ))
+    .map(mapOrder)
+    .filter((order) => isOrderWithinRange(order, range));
 
   const map = new Map();
   let units = 0;
@@ -682,7 +711,10 @@ async function getMonthlySalesReportDataBase({ excludeHdlr }) {
       units,
       revenue,
       currencyCode,
-      excludeHdlr
+      excludeHdlr,
+      month: range.month,
+      year: range.year,
+      monthLabel: range.label
     }
   };
 }

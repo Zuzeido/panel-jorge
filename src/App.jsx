@@ -23,6 +23,16 @@ const NAV_ITEMS = [
   { id: 'informes', label: 'Informes' }
 ];
 
+const REPORT_MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
+  const value = index + 1;
+  return {
+    value: String(value),
+    label: new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(
+      new Date(Date.UTC(2026, index, 1))
+    )
+  };
+});
+
 function formatDate(value) {
   return new Intl.DateTimeFormat('es-ES', {
     dateStyle: 'medium',
@@ -881,6 +891,9 @@ function OrdersView() {
 function ReportsView() {
   const [loadingKey, setLoadingKey] = useState('');
   const [error, setError] = useState('');
+  const currentDate = new Date();
+  const reportYear = currentDate.getFullYear();
+  const [selectedMonth, setSelectedMonth] = useState(String(currentDate.getMonth() + 1));
 
   async function handleDownload(key, path, filename) {
     try {
@@ -938,15 +951,29 @@ function ReportsView() {
             </div>
           </div>
           <p className="report-copy">
-            Resume todas las ventas del mes actual por producto, incluyendo numero de pedidos,
-            unidades vendidas e importe total.
+            Resume todas las ventas del mes seleccionado de {reportYear} por producto,
+            incluyendo numero de pedidos, unidades vendidas e importe total.
           </p>
+          <label className="report-filter">
+            <span>Mes del informe</span>
+            <select
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              disabled={loadingKey === 'monthly-sales' || loadingKey === 'monthly-sales-without-hdlr'}
+            >
+              {REPORT_MONTH_OPTIONS.map((month) => (
+                <option key={month.value} value={month.value}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={() =>
               handleDownload(
                 'monthly-sales',
-                '/api/reports/monthly-sales.pdf',
-                'recycled-j-ventas-mes-actual.pdf'
+                `/api/reports/monthly-sales.pdf?month=${selectedMonth}&year=${reportYear}`,
+                `recycled-j-ventas-${reportYear}-${selectedMonth.padStart(2, '0')}.pdf`
               )
             }
             disabled={loadingKey === 'monthly-sales'}
@@ -965,15 +992,15 @@ function ReportsView() {
             </div>
           </div>
           <p className="report-copy">
-            Genera el mismo informe mensual, pero excluyendo toda venta asociada a la familia o
-            coleccion HDLR.
+            Genera el mismo informe mensual del mes seleccionado, pero excluyendo toda venta
+            asociada a la familia o coleccion HDLR.
           </p>
           <button
             onClick={() =>
               handleDownload(
                 'monthly-sales-without-hdlr',
-                '/api/reports/monthly-sales-without-hdlr.pdf',
-                'recycled-j-ventas-mes-actual-sin-hdlr.pdf'
+                `/api/reports/monthly-sales-without-hdlr.pdf?month=${selectedMonth}&year=${reportYear}`,
+                `recycled-j-ventas-${reportYear}-${selectedMonth.padStart(2, '0')}-sin-hdlr.pdf`
               )
             }
             disabled={loadingKey === 'monthly-sales-without-hdlr'}
