@@ -403,6 +403,7 @@ export async function getStoreData() {
     }
   );
 
+  const currentMonthRange = getMonthRangeIso();
   const orderNodes = await fetchAllConnectionNodes(
     config,
     `
@@ -412,7 +413,7 @@ export async function getStoreData() {
           after: $after
           sortKey: CREATED_AT
           reverse: true
-          query: "created_at:>=${getCurrentMonthStartIso()}"
+          query: "created_at:>=${currentMonthRange.startIso} created_at:<${currentMonthRange.endIso}"
         ) {
           nodes {
             id
