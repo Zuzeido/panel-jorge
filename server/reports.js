@@ -14,6 +14,14 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 function monthLabel(dateValue = new Date()) {
   return new Intl.DateTimeFormat('es-ES', {
     month: 'long',
@@ -81,7 +89,12 @@ function drawKeyValue(doc, left, right, options = {}) {
 }
 
 export async function buildStockReportPdf({ products, generatedAt }) {
-  const orderedRows = [...products]
+  const filteredProducts = products.filter((product) => {
+    const normalizedTitle = normalizeText(product.title);
+    return normalizedTitle !== 'caja + cd casanova' && !normalizedTitle.includes('pack');
+  });
+
+  const orderedRows = [...filteredProducts]
     .sort((a, b) => a.title.localeCompare(b.title, 'es'))
     .flatMap((product) => {
       const orderedVariants = [...(product.variants || [])].sort((a, b) =>
