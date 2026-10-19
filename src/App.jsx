@@ -1220,6 +1220,7 @@ export default function App() {
   const [activeView, setActiveView] = useState('inicio');
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState('');
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1228,6 +1229,7 @@ export default function App() {
     try {
       const session = await loadSession();
       setUser(session.user);
+      setDashboardLoading(true);
       const data = await fetchDashboard();
       setDashboard(data);
       setDashboardError('');
@@ -1243,14 +1245,22 @@ export default function App() {
         setDashboardError(requestError.message);
       }
     } finally {
+      setDashboardLoading(false);
       setLoading(false);
     }
   }
 
   async function refreshDashboard() {
-    const data = await fetchDashboard();
-    setDashboard(data);
-    setDashboardError('');
+    setDashboardLoading(true);
+    try {
+      const data = await fetchDashboard();
+      setDashboard(data);
+      setDashboardError('');
+    } catch (requestError) {
+      setDashboardError(requestError.message);
+    } finally {
+      setDashboardLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -1269,6 +1279,7 @@ export default function App() {
     try {
       const loggedUser = await login(username, password);
       setUser(loggedUser);
+      setDashboardLoading(true);
       const data = await fetchDashboard();
       setDashboard(data);
       setDashboardError('');
@@ -1282,6 +1293,7 @@ export default function App() {
         setError('');
       }
     } finally {
+      setDashboardLoading(false);
       setAuthLoading(false);
       setLoading(false);
     }
@@ -1301,7 +1313,14 @@ export default function App() {
   }
 
   if (loading) {
-    return <div className="loading-screen">Cargando CRM de {BRAND_NAME}...</div>;
+    return (
+      <div className="loading-screen">
+        <div className="loading-state">
+          <span className="spinner" aria-hidden="true" />
+          <p>Cargando CRM de {BRAND_NAME}...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
@@ -1319,7 +1338,14 @@ export default function App() {
       />
 
       <main className="main-area">
-        {dashboard ? (
+        {dashboardLoading && !dashboard ? (
+          <div className="loading-screen">
+            <div className="loading-state">
+              <span className="spinner" aria-hidden="true" />
+              <p>Cargando dashboard de {BRAND_NAME}...</p>
+            </div>
+          </div>
+        ) : dashboard ? (
           <>
             <div className="toolbar">
               <div>
@@ -1330,10 +1356,18 @@ export default function App() {
                     : 'Datos demo cargados para revisar el panel.'}
                 </p>
               </div>
-              <button className="secondary-button" onClick={refreshDashboard}>
-                Recargar
+              <button
+                className="secondary-button"
+                onClick={refreshDashboard}
+                disabled={dashboardLoading}
+              >
+                {dashboardLoading ? 'Recargando...' : 'Recargar'}
               </button>
             </div>
+
+            {dashboardError ? (
+              <div className="loading-screen panel-inline-error">{dashboardError}</div>
+            ) : null}
 
             {activeView === 'inicio' ? <HomeView data={dashboard} /> : null}
             {activeView === 'colecciones' ? (
@@ -1344,8 +1378,13 @@ export default function App() {
             {activeView === 'informes' ? <ReportsView /> : null}
           </>
         ) : (
-          <div className="loading-screen">
-            {dashboardError || 'No se pudo cargar el dashboard.'}
+          <div className="loading-screen panel-inline-error">
+            <div className="loading-state">
+              <p>{dashboardError || 'No se pudo cargar el dashboard.'}</p>
+              <button onClick={refreshDashboard} disabled={dashboardLoading}>
+                {dashboardLoading ? 'Reintentando...' : 'Reintentar'}
+              </button>
+            </div>
           </div>
         )}
       </main>

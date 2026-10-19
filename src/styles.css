@@ -72,6 +72,32 @@ code {
   padding: 2rem;
 }
 
+.loading-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.85rem;
+  text-align: center;
+}
+
+.loading-state p {
+  margin: 0;
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(31, 59, 48, 0.16);
+  border-top-color: #1f3b30;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .panel-inline-error {
   min-height: auto;
   padding: 1rem 1.1rem;
