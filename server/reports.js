@@ -302,92 +302,42 @@ function drawReportTable(doc, columns, rows) {
 export async function buildProductSalesReportPdf({
   product,
   range,
-  rows,
   variantRows,
   summary,
   generatedAt
 }) {
-  return createPdfBuffer(
-    (doc) => {
-      drawHeader(
-        doc,
-        'Recycled J - Informe de ventas por producto',
-        `Producto: ${product} · ${range.label} · generado el ${formatDate(generatedAt)}`
-      );
+  return createPdfBuffer((doc) => {
+    drawHeader(
+      doc,
+      'Recycled J - Informe de ventas por producto',
+      `Producto: ${product} · ${range.label} · generado el ${formatDate(generatedAt)}`
+    );
 
-      drawSectionTitle(doc, 'Resumen');
-      drawKeyValue(doc, 'Pedidos con el producto', summary.ordersCount, { bold: true });
-      drawKeyValue(doc, 'Unidades vendidas', summary.units, { bold: true });
-      drawKeyValue(doc, 'Facturacion del periodo', formatMoney(summary.revenue, summary.currencyCode), {
-        bold: true
-      });
+    drawSectionTitle(doc, 'Resumen');
+    drawKeyValue(doc, 'Pedidos con el producto', summary.ordersCount, { bold: true });
+    drawKeyValue(doc, 'Unidades vendidas', summary.units, { bold: true });
+    drawKeyValue(doc, 'Facturacion del periodo', formatMoney(summary.revenue, summary.currencyCode), {
+      bold: true
+    });
 
-      drawSectionTitle(doc, 'Ventas por variante');
-      drawReportTable(
-        doc,
-        [
-          { key: 'name', label: 'Variante', width: 330, align: 'left' },
-          { key: 'ordersCount', label: 'Pedidos', width: 120, align: 'right' },
-          { key: 'units', label: 'Unidades', width: 120, align: 'right' },
-          {
-            key: 'revenue',
-            label: 'Facturacion',
-            width: 180,
-            align: 'right',
-            format: (row) => formatMoney(row.revenue, summary.currencyCode)
-          }
-        ],
-        variantRows.length
-          ? variantRows
-          : [{ name: 'Sin ventas en el rango seleccionado', ordersCount: 0, units: 0, revenue: 0 }]
-      );
-
-      drawSectionTitle(doc, 'Detalle de pedidos');
-      drawReportTable(
-        doc,
-        [
-          { key: 'orderName', label: 'Pedido', width: 80, align: 'left' },
-          {
-            key: 'createdAt',
-            label: 'Fecha',
-            width: 115,
-            align: 'left',
-            format: (row) => formatDate(row.createdAt)
-          },
-          { key: 'customerName', label: 'Cliente', width: 150, align: 'left' },
-          { key: 'variant', label: 'Variante', width: 150, align: 'left' },
-          {
-            key: 'quantity',
-            label: 'Unidades',
-            width: 55,
-            align: 'right',
-            format: (row) => `${row.quantity} uds.`
-          },
-          { key: 'financialStatus', label: 'Pago', width: 95, align: 'left' },
-          {
-            key: 'amount',
-            label: 'Importe',
-            width: 105,
-            align: 'right',
-            format: (row) => formatMoney(row.amount, row.currencyCode)
-          }
-        ],
-        rows.length
-          ? rows
-          : [
-              {
-                orderName: '-',
-                createdAt: generatedAt,
-                customerName: 'Sin pedidos en el rango seleccionado',
-                variant: '-',
-                quantity: 0,
-                financialStatus: '-',
-                amount: 0,
-                currencyCode: summary.currencyCode
-              }
-            ]
-      );
-    },
-    { layout: 'landscape' }
-  );
+    drawSectionTitle(doc, 'Ventas por variante');
+    drawReportTable(
+      doc,
+      [
+        { key: 'name', label: 'Variante', width: 241, align: 'left' },
+        { key: 'ordersCount', label: 'Pedidos', width: 80, align: 'right' },
+        { key: 'units', label: 'Unidades', width: 90, align: 'right' },
+        {
+          key: 'revenue',
+          label: 'Facturacion',
+          width: 100,
+          align: 'right',
+          format: (row) => formatMoney(row.revenue, summary.currencyCode)
+        }
+      ],
+      variantRows.length
+        ? variantRows
+        : [{ name: 'Sin ventas en el rango seleccionado', ordersCount: 0, units: 0, revenue: 0 }]
+    );
+  });
 }

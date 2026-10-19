@@ -777,7 +777,6 @@ export async function getProductSalesReportData({ product = '', from, to } = {})
         ).map(mapOrder)
   ).filter((order) => isOrderWithinRange(order, range));
 
-  const detailRows = [];
   const variantMap = new Map();
   let units = 0;
   let revenue = 0;
@@ -814,18 +813,6 @@ export async function getProductSalesReportData({ product = '', from, to } = {})
 
       units += itemUnits;
       revenue += itemRevenue;
-
-      detailRows.push({
-        orderName: order.name,
-        createdAt: order.createdAt,
-        customerName: order.customerName,
-        variant: variantKey,
-        quantity: itemUnits,
-        amount: itemRevenue,
-        currencyCode: item.currencyCode || currencyCode,
-        financialStatus: order.displayFinancialStatus || '-',
-        fulfillmentStatus: order.displayFulfillmentStatus || '-'
-      });
     }
   }
 
@@ -838,15 +825,10 @@ export async function getProductSalesReportData({ product = '', from, to } = {})
     }))
     .sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name, 'es'));
 
-  detailRows.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-
   return {
     generatedAt,
     product: normalizedProduct,
     range,
-    rows: detailRows,
     variantRows,
     summary: {
       ordersCount,
