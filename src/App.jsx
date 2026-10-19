@@ -60,6 +60,21 @@ function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function slugifyFilePart(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function toDateInputValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+}
+
 function isExcludedCategory(value) {
   return normalizeText(value) === normalizeText(EXCLUDED_CATEGORY);
 }
@@ -894,6 +909,67 @@ function ReportsView() {
   const currentDate = new Date();
   const reportYear = currentDate.getFullYear();
   const [selectedMonth, setSelectedMonth] = useState(String(currentDate.getMonth() + 1));
+  const [productSearchInput, setProductSearchInput] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [productResults, setProductResults] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [rangeFrom, setRangeFrom] = useState(() =>
+    toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+  );
+  const [rangeTo, setRangeTo] = useState(() => toDateInputValue(new Date()));
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setProductSearch(productSearchInput.trim());
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [productSearchInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!productSearch) {
+      setProductResults([]);
+      setProductsLoading(false);
+      return undefined;
+    }
+
+    async function loadProducts() {
+      try {
+        setProductsLoading(true);
+        const data = await fetchProductsPage({ first: 25, search: productSearch });
+        if (!cancelled) {
+          setProductResults(data.nodes || []);
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setProductResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setProductsLoading(false);
+        }
+      }
+    }
+
+    loadProducts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productSearch]);
+
+  function handleSelectProduct(product) {
+    setSelectedProduct(product);
+    setProductSearchInput('');
+    setProductSearch('');
+    setProductResults([]);
+    setError('');
+  }
 
   async function handleDownload(key, path, filename) {
     try {
@@ -905,6 +981,30 @@ function ReportsView() {
     } finally {
       setLoadingKey('');
     }
+  }
+
+  function handleDownloadProductReport() {
+    if (!selectedProduct) {
+      setError('Busca y selecciona un producto antes de generar el informe.');
+      return;
+    }
+
+    if (!rangeFrom || !rangeTo) {
+      setError('Selecciona las fechas de inicio y fin del informe.');
+      return;
+    }
+
+    if (rangeFrom > rangeTo) {
+      setError('La fecha inicial no puede ser posterior a la final.');
+      return;
+    }
+
+    const productSlug = slugifyFilePart(selectedProduct.title) || 'producto';
+    handleDownload(
+      'product-sales',
+      `/api/reports/product-sales.pdf?product=${encodeURIComponent(selectedProduct.title)}&from=${rangeFrom}&to=${rangeTo}`,
+      `recycled-j-ventas-${productSlug}-${rangeFrom}-${rangeTo}.pdf`
+    );
   }
 
   return (
@@ -1022,6 +1122,92 @@ function ReportsView() {
             {loadingKey === 'monthly-sales-without-hdlr'
               ? 'Generando PDF...'
               : 'Descargar informe sin HDLR'}
+          </button>
+        </article>
+
+        <article className="panel-card report-card">
+          <div className="panel-title">
+            <div>
+              <span className="eyebrow">PDF</span>
+              <h3>Informe de ventas por producto</h3>
+            </div>
+          </div>
+          <p className="report-copy">
+            Busca un producto, elige un rango de fechas y descarga un PDF con los pedidos,
+            unidades y facturacion de ese producto en el periodo seleccionado.
+          </p>
+
+          {selectedProduct ? (
+            <div className="product-selection">
+              <span>Producto seleccionado</span>
+              <div className="product-selection-row">
+                <strong>{selectedProduct.title}</strong>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setSelectedProduct(null)}
+                >
+                  Cambiar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="product-picker">
+              <label className="report-filter">
+                <span>Buscar producto</span>
+                <input
+                  className="search-input"
+                  placeholder="Escribe el nombre del producto"
+                  value={productSearchInput}
+                  onChange={(event) => setProductSearchInput(event.target.value)}
+                />
+              </label>
+              {productsLoading ? <p className="product-picker-hint">Buscando productos...</p> : null}
+              {!productsLoading && productSearch && !productResults.length ? (
+                <p className="product-picker-hint">
+                  Sin resultados para &quot;{productSearch}&quot;.
+                </p>
+              ) : null}
+              {productResults.length ? (
+                <ul className="product-picker-results">
+                  {productResults.map((product) => (
+                    <li key={product.id}>
+                      <button type="button" onClick={() => handleSelectProduct(product)}>
+                        <strong>{product.title}</strong>
+                        <span>{product.collections?.join(', ') || 'Sin coleccion'}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )}
+
+          <div className="report-date-range">
+            <label className="report-filter">
+              <span>Desde</span>
+              <input
+                type="date"
+                value={rangeFrom}
+                max={rangeTo || undefined}
+                onChange={(event) => setRangeFrom(event.target.value)}
+              />
+            </label>
+            <label className="report-filter">
+              <span>Hasta</span>
+              <input
+                type="date"
+                value={rangeTo}
+                min={rangeFrom || undefined}
+                onChange={(event) => setRangeTo(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <button onClick={handleDownloadProductReport} disabled={loadingKey === 'product-sales'}>
+            {loadingKey === 'product-sales'
+              ? 'Generando PDF...'
+              : 'Descargar informe del producto'}
           </button>
         </article>
       </section>

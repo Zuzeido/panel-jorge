@@ -187,6 +187,93 @@ function isOrderWithinRange(order, range) {
   return orderTime >= new Date(range.startIso).getTime() && orderTime < new Date(range.endIso).getTime();
 }
 
+function getCustomRangeIso({ from, to }) {
+  const fromMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(from || ''));
+  const toMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(to || ''));
+
+  if (!fromMatch || !toMatch) {
+    throw new Error('Selecciona un rango de fechas valido (AAAA-MM-DD).');
+  }
+
+  const start = new Date(Date.UTC(Number(fromMatch[1]), Number(fromMatch[2]) - 1, Number(fromMatch[3])));
+  const end = new Date(Date.UTC(Number(toMatch[1]), Number(toMatch[2]) - 1, Number(toMatch[3]) + 1));
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+    throw new Error('La fecha inicial no puede ser posterior a la final.');
+  }
+
+  const dateFormatter = new Intl.DateTimeFormat('es-ES', {
+    dateStyle: 'medium',
+    timeZone: 'UTC'
+  });
+
+  return {
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+    from: fromMatch[0],
+    to: toMatch[0],
+    label: `del ${dateFormatter.format(start)} al ${dateFormatter.format(new Date(end.getTime() - 1))}`
+  };
+}
+
+function buildReportOrdersQuery(range) {
+  return `
+    query ReportOrders($first: Int!, $after: String) {
+      orders(
+        first: $first
+        after: $after
+        sortKey: CREATED_AT
+        reverse: true
+        query: "created_at:>=${range.startIso} created_at:<${range.endIso}"
+      ) {
+        nodes {
+          id
+          name
+          createdAt
+          displayFulfillmentStatus
+          displayFinancialStatus
+          totalPriceSet {
+            shopMoney {
+              amount
+              currencyCode
+            }
+          }
+          customer {
+            displayName
+          }
+          lineItems(first: 50) {
+            nodes {
+              title
+              quantity
+              discountedTotalSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+              variant {
+                product {
+                  title
+                  productType
+                  collections(first: 10) {
+                    nodes {
+                      title
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  `;
+}
+
 function buildConnectionResult(nodes, hasNextPage = false, endCursor = null) {
   return {
     nodes,
@@ -593,72 +680,18 @@ async function getMonthlySalesReportDataBase({ excludeHdlr, month, year }) {
   const generatedAt = new Date().toISOString();
   const range = getMonthRangeIso({ month, year });
 
-  const orders = (!hasCredentials(config)
-    ? demoOrders
-    : (
-        await fetchAllConnectionNodes(
-          config,
-          `
-            query MonthlyReportOrders($first: Int!, $after: String) {
-              orders(
-                first: $first
-                after: $after
-                sortKey: CREATED_AT
-                reverse: true
-                query: "created_at:>=${range.startIso} created_at:<${range.endIso}"
-              ) {
-                nodes {
-                  id
-                  name
-                  createdAt
-                  displayFulfillmentStatus
-                  displayFinancialStatus
-                  totalPriceSet {
-                    shopMoney {
-                      amount
-                      currencyCode
-                    }
-                  }
-                  customer {
-                    displayName
-                  }
-                  lineItems(first: 50) {
-                    nodes {
-                      title
-                      quantity
-                      discountedTotalSet {
-                        shopMoney {
-                          amount
-                          currencyCode
-                        }
-                      }
-                      variant {
-                        product {
-                          title
-                          productType
-                          collections(first: 10) {
-                            nodes {
-                              title
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-                pageInfo {
-                  hasNextPage
-                  endCursor
-                }
-              }
-            }
-          `,
-          'orders',
-          25
-        )
-      ))
-    .map(mapOrder)
-    .filter((order) => isOrderWithinRange(order, range));
+  const orders = (
+    !hasCredentials(config)
+      ? demoOrders
+      : (
+          await fetchAllConnectionNodes(
+            config,
+            buildReportOrdersQuery(range),
+            'orders',
+            25
+          )
+        ).map(mapOrder)
+  ).filter((order) => isOrderWithinRange(order, range));
 
   const map = new Map();
   let units = 0;
@@ -716,6 +749,110 @@ async function getMonthlySalesReportDataBase({ excludeHdlr, month, year }) {
       month: range.month,
       year: range.year,
       monthLabel: range.label
+    }
+  };
+}
+
+export async function getProductSalesReportData({ product = '', from, to } = {}) {
+  const normalizedProduct = String(product || '').trim();
+
+  if (!normalizedProduct) {
+    throw new Error('Selecciona un producto para generar el informe.');
+  }
+
+  const config = await readShopifyConfig();
+  const generatedAt = new Date().toISOString();
+  const range = getCustomRangeIso({ from, to });
+
+  const orders = (
+    !hasCredentials(config)
+      ? demoOrders
+      : (
+          await fetchAllConnectionNodes(
+            config,
+            buildReportOrdersQuery(range),
+            'orders',
+            25
+          )
+        ).map(mapOrder)
+  ).filter((order) => isOrderWithinRange(order, range));
+
+  const detailRows = [];
+  const variantMap = new Map();
+  let units = 0;
+  let revenue = 0;
+  let ordersCount = 0;
+  const currencyCode = orders[0]?.currencyCode || 'EUR';
+  const productKey = normalizedProduct.toLowerCase();
+
+  for (const order of orders) {
+    const matchingItems = (order.lineItems || []).filter(
+      (item) => String(item.productTitle || item.title || '').trim().toLowerCase() === productKey
+    );
+
+    if (!matchingItems.length) {
+      continue;
+    }
+
+    ordersCount += 1;
+
+    for (const item of matchingItems) {
+      const itemUnits = Number(item.quantity || 0);
+      const itemRevenue = Number(item.totalAmount || 0);
+      const variantKey = String(item.title || item.productTitle || 'Variante').trim();
+
+      const variant = variantMap.get(variantKey) || {
+        name: variantKey,
+        orders: new Set(),
+        units: 0,
+        revenue: 0
+      };
+      variant.orders.add(order.id);
+      variant.units += itemUnits;
+      variant.revenue += itemRevenue;
+      variantMap.set(variantKey, variant);
+
+      units += itemUnits;
+      revenue += itemRevenue;
+
+      detailRows.push({
+        orderName: order.name,
+        createdAt: order.createdAt,
+        customerName: order.customerName,
+        variant: variantKey,
+        quantity: itemUnits,
+        amount: itemRevenue,
+        currencyCode: item.currencyCode || currencyCode,
+        financialStatus: order.displayFinancialStatus || '-',
+        fulfillmentStatus: order.displayFulfillmentStatus || '-'
+      });
+    }
+  }
+
+  const variantRows = Array.from(variantMap.values())
+    .map((variant) => ({
+      name: variant.name,
+      ordersCount: variant.orders.size,
+      units: variant.units,
+      revenue: variant.revenue
+    }))
+    .sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name, 'es'));
+
+  detailRows.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return {
+    generatedAt,
+    product: normalizedProduct,
+    range,
+    rows: detailRows,
+    variantRows,
+    summary: {
+      ordersCount,
+      units,
+      revenue,
+      currencyCode
     }
   };
 }

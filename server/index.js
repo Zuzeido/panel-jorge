@@ -3,11 +3,12 @@ import cors from 'cors';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildMonthlySalesReportPdf, buildStockReportPdf } from './reports.js';
+import { buildMonthlySalesReportPdf, buildProductSalesReportPdf, buildStockReportPdf } from './reports.js';
 import {
   getMonthlySalesReportWithoutHdlrData,
   getMonthlySalesReportData,
   getOrdersPage,
+  getProductSalesReportData,
   getProductsPage,
   getStockReportData,
   getStoreData,
@@ -163,6 +164,32 @@ app.get('/api/reports/monthly-sales-without-hdlr.pdf', requireAuth, async (_req,
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="recycled-j-ventas-${payload.summary.year}-${String(payload.summary.month).padStart(2, '0')}-sin-hdlr.pdf"`
+    );
+    return res.send(pdfBuffer);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reports/product-sales.pdf', requireAuth, async (req, res) => {
+  try {
+    const payload = await getProductSalesReportData({
+      product: String(req.query.product || ''),
+      from: String(req.query.from || ''),
+      to: String(req.query.to || '')
+    });
+    const pdfBuffer = await buildProductSalesReportPdf(payload);
+    const productSlug =
+      payload.product
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'producto';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="recycled-j-ventas-${productSlug}-${payload.range.from}-${payload.range.to}.pdf"`
     );
     return res.send(pdfBuffer);
   } catch (error) {

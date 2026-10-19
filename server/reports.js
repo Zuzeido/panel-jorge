@@ -245,3 +245,149 @@ export async function buildMonthlySalesReportPdf({ rows, summary, generatedAt })
     });
   });
 }
+
+function drawReportTable(doc, columns, rows) {
+  const tableLeft = doc.page.margins.left;
+  const rowHeight = 22;
+  const totalWidth = columns.reduce((sum, column) => sum + column.width, 0);
+
+  function drawTableHeader() {
+    ensureSpace(doc, 34);
+    let x = tableLeft;
+    const y = doc.y;
+
+    doc.rect(tableLeft, y, totalWidth, rowHeight).fill('#e8efe8');
+    doc.fillColor('#17324d').font('Helvetica-Bold').fontSize(9);
+
+    columns.forEach((column) => {
+      doc.text(column.label, x + 6, y + 7, {
+        width: column.width - 12,
+        align: column.align
+      });
+      x += column.width;
+    });
+
+    doc.y = y + rowHeight + 4;
+  }
+
+  drawTableHeader();
+
+  rows.forEach((row, index) => {
+    ensureSpace(doc, rowHeight + 6);
+    if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      drawTableHeader();
+    }
+
+    const y = doc.y;
+    const fill = index % 2 === 0 ? '#f8faf8' : '#eef3ee';
+    doc.rect(tableLeft, y, totalWidth, rowHeight).fill(fill);
+
+    let x = tableLeft;
+    doc.fillColor('#243c31').font('Helvetica').fontSize(8.5);
+    columns.forEach((column) => {
+      const value = column.format ? column.format(row) : row[column.key];
+      doc.text(String(value ?? ''), x + 6, y + 7, {
+        width: column.width - 12,
+        align: column.align,
+        ellipsis: true
+      });
+      x += column.width;
+    });
+
+    doc.y = y + rowHeight + 2;
+  });
+}
+
+export async function buildProductSalesReportPdf({
+  product,
+  range,
+  rows,
+  variantRows,
+  summary,
+  generatedAt
+}) {
+  return createPdfBuffer(
+    (doc) => {
+      drawHeader(
+        doc,
+        'Recycled J - Informe de ventas por producto',
+        `Producto: ${product} · ${range.label} · generado el ${formatDate(generatedAt)}`
+      );
+
+      drawSectionTitle(doc, 'Resumen');
+      drawKeyValue(doc, 'Pedidos con el producto', summary.ordersCount, { bold: true });
+      drawKeyValue(doc, 'Unidades vendidas', summary.units, { bold: true });
+      drawKeyValue(doc, 'Facturacion del periodo', formatMoney(summary.revenue, summary.currencyCode), {
+        bold: true
+      });
+
+      drawSectionTitle(doc, 'Ventas por variante');
+      drawReportTable(
+        doc,
+        [
+          { key: 'name', label: 'Variante', width: 330, align: 'left' },
+          { key: 'ordersCount', label: 'Pedidos', width: 120, align: 'right' },
+          { key: 'units', label: 'Unidades', width: 120, align: 'right' },
+          {
+            key: 'revenue',
+            label: 'Facturacion',
+            width: 180,
+            align: 'right',
+            format: (row) => formatMoney(row.revenue, summary.currencyCode)
+          }
+        ],
+        variantRows.length
+          ? variantRows
+          : [{ name: 'Sin ventas en el rango seleccionado', ordersCount: 0, units: 0, revenue: 0 }]
+      );
+
+      drawSectionTitle(doc, 'Detalle de pedidos');
+      drawReportTable(
+        doc,
+        [
+          { key: 'orderName', label: 'Pedido', width: 80, align: 'left' },
+          {
+            key: 'createdAt',
+            label: 'Fecha',
+            width: 115,
+            align: 'left',
+            format: (row) => formatDate(row.createdAt)
+          },
+          { key: 'customerName', label: 'Cliente', width: 150, align: 'left' },
+          { key: 'variant', label: 'Variante', width: 150, align: 'left' },
+          {
+            key: 'quantity',
+            label: 'Unidades',
+            width: 55,
+            align: 'right',
+            format: (row) => `${row.quantity} uds.`
+          },
+          { key: 'financialStatus', label: 'Pago', width: 95, align: 'left' },
+          {
+            key: 'amount',
+            label: 'Importe',
+            width: 105,
+            align: 'right',
+            format: (row) => formatMoney(row.amount, row.currencyCode)
+          }
+        ],
+        rows.length
+          ? rows
+          : [
+              {
+                orderName: '-',
+                createdAt: generatedAt,
+                customerName: 'Sin pedidos en el rango seleccionado',
+                variant: '-',
+                quantity: 0,
+                financialStatus: '-',
+                amount: 0,
+                currencyCode: summary.currencyCode
+              }
+            ]
+      );
+    },
+    { layout: 'landscape' }
+  );
+}
